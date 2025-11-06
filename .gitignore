@@ -1,0 +1,18 @@
+# models / checkpoints / caches
+models/
+*.gguf
+*.bin
+*.pt
+*.safetensors
+*.zip
+*.7z
+*.tar*
+# typical Python/IDE junk
+__pycache__/
+*.py[cod]
+env/
+.venv/
+build/
+dist/
+.vscode/
+.idea/

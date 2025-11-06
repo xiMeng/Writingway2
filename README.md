@@ -1,0 +1,1 @@
+Writingway 2.0, readme is WIP ;)

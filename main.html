@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writingway 2.0</title>
+    <!-- Note: This file should be named main.html and opened via start.bat -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #4a9eff;
+            --accent-hover: #3a7fd9;
+            --border: #404040;
+            --success: #4ade80;
+            --warning: #fbbf24;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: var(--accent);
+        }
+
+        .sidebar-header p {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .project-info {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .project-info h2 {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .project-info .word-count {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .ai-status {
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .ai-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+
+        .status-dot.loading {
+            background: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.ready {
+            background: var(--success);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .scene-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .scene-item {
+            padding: 12px 15px;
+            margin-bottom: 5px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .scene-item:hover {
+            background: var(--bg-primary);
+        }
+
+        .scene-item.active {
+            border-color: var(--accent);
+            background: var(--bg-primary);
+        }
+
+        .scene-item .scene-title {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .scene-item .scene-meta {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .add-scene-btn {
+            margin: 10px;
+            padding: 12px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .add-scene-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Editor Area */
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .editor-header {
+            padding: 15px 30px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .editor-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .save-indicator {
+            padding: 4px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .save-indicator.saving {
+            color: var(--accent);
+        }
+
+        .editor-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .editor-textarea {
+            flex: 1;
+            padding: 40px;
+            background: var(--bg-primary);
+            border: none;
+            color: var(--text-primary);
+            font-size: 16px;
+            line-height: 1.8;
+            resize: none;
+            outline: none;
+            font-family: 'Georgia', serif;
+        }
+
+        .editor-textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        /* Beat Panel */
+        .beat-panel {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 20px 30px;
+        }
+
+        .beat-panel h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .beat-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .beat-input {
+            flex: 1;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+        }
+
+        .beat-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .generate-btn {
+            padding: 12px 24px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .generate-btn:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+
+        .generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .context-info {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Welcome Screen */
+        .welcome-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .welcome-content {
+            max-width: 600px;
+        }
+
+        .welcome-content h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: var(--accent);
+        }
+
+        .welcome-content p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .welcome-content .note {
+            font-size: 14px;
+            color: var(--warning);
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid var(--border);
+        }
+
+        .modal h3 {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .modal p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-primary);
+        }
+
+        .loading-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .loading-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div x-data="app" x-init="init()">
+        <!-- Main App -->
+        <template x-if="currentProject && !showModelLoading">
+            <div class="app-container">
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <div class="sidebar-header">
+                        <h1>Writingway</h1>
+                        <p>AI-Powered Creative Writing</p>
+                    </div>
+
+                    <!-- AI Status -->
+                    <div class="ai-status">
+                        <div class="ai-status-item">
+                            <div class="status-dot" :class="aiStatus"></div>
+                            <span x-text="aiStatusText"></span>
+                        </div>
+                    </div>
+
+                    <div class="project-info">
+                        <h2 x-text="currentProject.name"></h2>
+                        <div class="word-count" x-text="`${totalWords} words`"></div>
+                    </div>
+
+                    <div class="scene-list">
+                        <template x-for="scene in scenes" :key="scene.id">
+                            <div 
+                                class="scene-item" 
+                                :class="{ 'active': currentScene && currentScene.id === scene.id }"
+                                @click="loadScene(scene.id)">
+                                <div class="scene-title" x-text="scene.title"></div>
+                                <div class="scene-meta" x-text="`${scene.wordCount || 0} words`"></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <button class="add-scene-btn" @click="showNewSceneModal = true">
+                        + New Scene
+                    </button>
+                </div>
+
+                <!-- Editor -->
+                <div class="editor-container">
+                    <div class="editor-header">
+                        <div class="editor-title" x-text="currentScene ? currentScene.title : 'No scene selected'"></div>
+                        <div class="editor-stats">
+                            <span x-text="`${currentSceneWords} words`"></span>
+                            <span class="save-indicator" :class="{ 'saving': isSaving }" x-text="saveStatus"></span>
+                        </div>
+                    </div>
+
+                    <div class="editor-main">
+                        <template x-if="currentScene">
+                            <textarea 
+                                class="editor-textarea"
+                                x-model="currentScene.content"
+                                @input="onEditorChange"
+                                placeholder="Start writing your scene here..."
+                            ></textarea>
+                        </template>
+
+                        <template x-if="!currentScene">
+                            <div class="welcome-screen">
+                                <div class="welcome-content">
+                                    <h2>Ready to Write</h2>
+                                    <p>Select a scene from the sidebar or create a new one to get started.</p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Beat Panel -->
+                    <div class="beat-panel">
+                        <h3>Generate from Beat</h3>
+                        <div class="beat-input-group">
+                            <textarea 
+                                class="beat-input" 
+                                x-model="beatInput"
+                                placeholder="Describe what happens next (e.g., 'She grabs her bag and leaves the apartment. She senses tension in the corridor.')"
+                                rows="2"
+                            ></textarea>
+                            <button 
+                                class="generate-btn" 
+                                @click="generateFromBeat"
+                                :disabled="!beatInput || isGenerating || aiStatus !== 'ready'">
+                                <span x-text="isGenerating ? 'Generating...' : 'Generate'"></span>
+                            </button>
+                        </div>
+                        <div class="context-info">
+                            <span x-show="aiStatus === 'ready'">✓ AI ready • Will use current scene as context</span>
+                            <span x-show="aiStatus === 'loading'">⏳ Loading model...</span>
+                            <span x-show="aiStatus === 'error'">⚠️ Model not loaded (using placeholder text for now)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Model Loading Screen -->
+        <template x-if="showModelLoading">
+            <div class="welcome-screen">
+                <div class="welcome-content">
+                    <h2>Setting Up AI</h2>
+                    <p x-text="loadingMessage"></p>
+                    <div class="loading-bar">
+                        <div class="loading-bar-fill" :style="`width: ${loadingProgress}%`"></div>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 14px;" x-text="`${loadingProgress}%`"></p>
+                    <div class="note" x-show="loadingProgress < 100">
+                        This may take a minute on first run while the AI engine initializes...
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Welcome Screen (No Project) -->
+        <template x-if="!currentProject && !showModelLoading">
+            <div class="welcome-screen">
+                <div class="welcome-content">
+                    <h2>Welcome to Writingway 2.0</h2>
+                    <p>A free, open-source creative writing tool with AI assistance. Everything runs locally on your computer.</p>
+                    <button class="btn btn-primary" @click="showNewProjectModal = true">
+                        Create Your First Project
+                    </button>
+                    <div class="note">
+                        <strong>Note:</strong> AI integration is currently being set up. The app will work without AI, and generation features will use placeholder text until the local model is fully configured.
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- New Project Modal -->
+        <template x-if="showNewProjectModal">
+            <div class="modal-overlay" @click.self="showNewProjectModal = false">
+                <div class="modal">
+                    <h3>New Project</h3>
+                    <input 
+                        type="text" 
+                        x-model="newProjectName"
+                        placeholder="Project name (e.g., 'My Novel')"
+                        @keydown.enter="createProject">
+                    <div class="modal-buttons">
+                        <button class="btn btn-secondary" @click="showNewProjectModal = false">Cancel</button>
+                        <button class="btn btn-primary" @click="createProject">Create</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- New Scene Modal -->
+        <template x-if="showNewSceneModal">
+            <div class="modal-overlay" @click.self="showNewSceneModal = false">
+                <div class="modal">
+                    <h3>New Scene</h3>
+                    <input 
+                        type="text" 
+                        x-model="newSceneName"
+                        placeholder="Scene name (e.g., 'Opening')"
+                        @keydown.enter="createScene">
+                    <div class="modal-buttons">
+                        <button class="btn btn-secondary" @click="showNewSceneModal = false">Cancel</button>
+                        <button class="btn btn-primary" @click="createScene">Create</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <script>
+        // Initialize Dexie Database
+        const db = new Dexie('WritingwayDB');
+        db.version(1).stores({
+            projects: 'id, name, created, modified',
+            scenes: 'id, projectId, title, order, created, modified',
+            content: 'sceneId, text, wordCount'
+        });
+
+        // Alpine.js App
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('app', () => ({
+                // State
+                currentProject: null,
+                currentScene: null,
+                scenes: [],
+                beatInput: '',
+                isGenerating: false,
+                isSaving: false,
+                saveStatus: 'Saved',
+                saveTimeout: null,
+                showNewProjectModal: false,
+                showNewSceneModal: false,
+                newProjectName: '',
+                newSceneName: '',
+                
+                // AI State
+                aiWorker: null,
+                aiStatus: 'loading', // loading, ready, error
+                aiStatusText: 'Initializing...',
+                showModelLoading: false,
+                loadingMessage: 'Setting up AI...',
+                loadingProgress: 0,
+
+                // Computed
+                get currentSceneWords() {
+                    if (!this.currentScene || !this.currentScene.content) return 0;
+                    return this.countWords(this.currentScene.content);
+                },
+
+                get totalWords() {
+                    return this.scenes.reduce((total, scene) => total + (scene.wordCount || 0), 0);
+                },
+
+                // Initialize
+                async init() {
+                    await this.loadLastProject();
+                    await this.initializeAI();
+                },
+
+                async initializeAI() {
+                    try {
+                        this.showModelLoading = true;
+                        this.loadingMessage = 'Connecting to AI server...';
+                        this.loadingProgress = 30;
+
+                        // Check if llama-server is running
+                        const response = await fetch('http://localhost:8080/health');
+                        
+                        if (response.ok) {
+                            this.loadingProgress = 100;
+                            this.loadingMessage = 'Connected to AI!';
+                            
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            this.aiStatus = 'ready';
+                            this.aiStatusText = 'AI Ready (Local Server)';
+                            this.showModelLoading = false;
+                            
+                            console.log('✓ Connected to llama-server successfully');
+                        } else {
+                            throw new Error('Server not responding');
+                        }
+                    } catch (error) {
+                        console.error('Could not connect to AI server:', error);
+                        this.aiStatus = 'error';
+                        this.aiStatusText = 'AI server not running';
+                        this.showModelLoading = false;
+                        
+                        console.log('Make sure start.bat launched llama-server successfully');
+                    }
+                },
+
+                async loadLastProject() {
+                    const projects = await db.projects.toArray();
+                    if (projects.length > 0) {
+                        this.currentProject = projects[0];
+                        await this.loadScenes();
+                        if (this.scenes.length > 0) {
+                            await this.loadScene(this.scenes[0].id);
+                        }
+                    }
+                },
+
+                // Project Management
+                async createProject() {
+                    if (!this.newProjectName) return;
+
+                    const project = {
+                        id: Date.now().toString(),
+                        name: this.newProjectName,
+                        created: new Date(),
+                        modified: new Date()
+                    };
+
+                    await db.projects.add(project);
+                    this.currentProject = project;
+                    this.showNewProjectModal = false;
+                    this.newProjectName = '';
+
+                    await this.createDefaultScene();
+                },
+
+                async createDefaultScene() {
+                    const scene = {
+                        id: Date.now().toString(),
+                        projectId: this.currentProject.id,
+                        title: 'Scene 1',
+                        order: 0,
+                        created: new Date(),
+                        modified: new Date()
+                    };
+
+                    await db.scenes.add(scene);
+                    await db.content.add({
+                        sceneId: scene.id,
+                        text: '',
+                        wordCount: 0
+                    });
+
+                    await this.loadScenes();
+                    await this.loadScene(scene.id);
+                },
+
+                // Scene Management
+                async loadScenes() {
+                    this.scenes = await db.scenes
+                        .where('projectId')
+                        .equals(this.currentProject.id)
+                        .sortBy('order');
+
+                    for (let scene of this.scenes) {
+                        const content = await db.content.get(scene.id);
+                        scene.wordCount = content ? content.wordCount : 0;
+                    }
+                },
+
+                async createScene() {
+                    if (!this.newSceneName) return;
+
+                    const scene = {
+                        id: Date.now().toString(),
+                        projectId: this.currentProject.id,
+                        title: this.newSceneName,
+                        order: this.scenes.length,
+                        created: new Date(),
+                        modified: new Date()
+                    };
+
+                    await db.scenes.add(scene);
+                    await db.content.add({
+                        sceneId: scene.id,
+                        text: '',
+                        wordCount: 0
+                    });
+
+                    this.showNewSceneModal = false;
+                    this.newSceneName = '';
+                    await this.loadScenes();
+                    await this.loadScene(scene.id);
+                },
+
+                async loadScene(sceneId) {
+                    const scene = await db.scenes.get(sceneId);
+                    const content = await db.content.get(sceneId);
+
+                    this.currentScene = {
+                        ...scene,
+                        content: content ? content.text : ''
+                    };
+                },
+
+                // Editor
+                onEditorChange() {
+                    this.saveStatus = 'Unsaved';
+                    clearTimeout(this.saveTimeout);
+                    this.saveTimeout = setTimeout(() => {
+                        this.saveScene();
+                    }, 2000);
+                },
+
+                async saveScene() {
+                    if (!this.currentScene) return;
+
+                    this.isSaving = true;
+                    this.saveStatus = 'Saving...';
+
+                    const wordCount = this.countWords(this.currentScene.content);
+
+                    await db.content.put({
+                        sceneId: this.currentScene.id,
+                        text: this.currentScene.content,
+                        wordCount: wordCount
+                    });
+
+                    await db.scenes.update(this.currentScene.id, {
+                        modified: new Date()
+                    });
+
+                    const sceneIndex = this.scenes.findIndex(s => s.id === this.currentScene.id);
+                    if (sceneIndex !== -1) {
+                        this.scenes[sceneIndex].wordCount = wordCount;
+                    }
+
+                    this.isSaving = false;
+                    this.saveStatus = 'Saved';
+                },
+
+                countWords(text) {
+                    if (!text) return 0;
+                    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+                },
+
+                // AI Generation (Real llama-server)
+                async generateFromBeat() {
+                    if (!this.beatInput || this.aiStatus !== 'ready') return;
+
+                    this.isGenerating = true;
+
+                    try {
+                        // Build the prompt
+                        const prompt = this.buildPrompt(this.beatInput, this.currentScene?.content || '');
+
+                        console.log('Sending generation request to llama-server...');
+
+                        // Call llama-server's completion endpoint
+                        const response = await fetch('http://localhost:8080/completion', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                prompt: prompt,
+                                n_predict: 300,
+                                temperature: 0.8,
+                                top_p: 0.9,
+                                stop: ['<|im_end|>', '<|endoftext|>', '\n\n\n\n', 'USER:', 'HUMAN:'],
+                                stream: true
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Server returned ${response.status}`);
+                        }
+
+                        // Stream the response
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            buffer += decoder.decode(value, { stream: true });
+                            
+                            // Parse SSE format (Server-Sent Events)
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop(); // Keep incomplete line in buffer
+
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const data = JSON.parse(line.slice(6));
+                                        if (data.content) {
+                                            // Stream each token into the editor
+                                            this.currentScene.content += data.content;
+                                        }
+                                        if (data.stop) {
+                                            break;
+                                        }
+                                    } catch (e) {
+                                        // Ignore JSON parse errors for incomplete chunks
+                                    }
+                                }
+                            }
+                        }
+
+                        console.log('✓ Generation complete');
+
+                        // Clear beat input
+                        this.beatInput = '';
+
+                        // Auto-save after generation
+                        await this.saveScene();
+
+                    } catch (error) {
+                        console.error('Generation error:', error);
+                        alert('Failed to generate text. Make sure llama-server is running.\n\nError: ' + error.message);
+                    } finally {
+                        this.isGenerating = false;
+                    }
+                },
+
+                buildPrompt(beat, sceneContext) {
+                    // Qwen3 uses ChatML format
+                    const systemPrompt = `You are a creative writing assistant. The author provides a BEAT (what happens next) and you expand it into vivid, engaging prose. Write 2-3 paragraphs that bring the beat to life. Match the author's tone and style. Use sensory details. Show, don't tell.`;
+
+                    let contextText = '';
+                    if (sceneContext && sceneContext.length > 0) {
+                        // Use last 500 words of current scene as context
+                        const words = sceneContext.split(/\s+/);
+                        const contextWords = words.slice(-500).join(' ');
+                        contextText = `\n\nCURRENT SCENE SO FAR:\n${contextWords}`;
+                    }
+
+                    const prompt = `<|im_start|>system
+${systemPrompt}<|im_end|>
+<|im_start|>user
+${contextText}
+
+BEAT TO EXPAND:
+${beat}
+
+Write the next 2-3 paragraphs:<|im_end|>
+<|im_start|>assistant
+`;
+
+                    return prompt;
+                }
+            }));
+        });
+    </script>
+</body>
+</html>
