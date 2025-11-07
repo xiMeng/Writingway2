@@ -620,6 +620,17 @@ document.addEventListener('alpine:init', () => {
         },
 
         async saveScene() {
+            // Delegate to extracted save utility when available
+            if (window.Save && typeof window.Save.saveScene === 'function') {
+                try {
+                    return await window.Save.saveScene(this);
+                } catch (err) {
+                    // If helper fails, fall through to fallback behavior
+                    console.error('Save helper failed, falling back to inline save:', err);
+                }
+            }
+
+            // Fallback (inlined) save behavior if save-utils is not loaded or failed
             if (!this.currentScene) return;
 
             this.isSaving = true;
