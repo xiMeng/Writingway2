@@ -1,0 +1,11 @@
+{
+    "name": "writingway2-smoke",
+    "version": "1.0.0",
+    "private": true,
+    "devDependencies": {
+        "playwright": "^1.40.0"
+    },
+    "scripts": {
+        "smoke": "node tests/smoke.js"
+    }
+}
