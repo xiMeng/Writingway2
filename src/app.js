@@ -805,7 +805,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        
+
 
         // Normalize chapter and scene order fields to be consecutive integers.
         async normalizeAllOrders() {
