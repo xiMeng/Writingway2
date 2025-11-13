@@ -38,6 +38,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
 }
 
 .sidebar-header {
@@ -56,19 +57,65 @@ body {
     color: var(--text-secondary);
 }
 
-.project-info {
-    padding: 15px 20px;
-    border-bottom: 1px solid var(--border);
+.sidebar-actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 0;
+    z-index: 3;
 }
 
-.project-info h2 {
-    font-size: 16px;
-    margin-bottom: 5px;
+@media (max-width: 420px) {
+    .add-scene-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .add-scene-btn svg {
+        width: 20px;
+        height: 20px;
+    }
 }
 
 .project-info .word-count {
     font-size: 12px;
     color: var(--text-secondary);
+}
+
+/* Keep project name sizing reasonable */
+.project-name-button {
+    font-size: 1rem !important;
+    font-weight: 700;
+}
+
+/* Make project name visually respond on hover (like scene items) to indicate it's clickable */
+.project-name-button {
+    display: inline-block;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+    cursor: pointer;
+}
+
+.project-name-button:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    border-left: 4px solid var(--accent);
+    padding-left: 10px;
+}
+
+.project-name-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.06);
+}
+
+.project-info h2 {
+    font-size: 16px;
+    margin: 0;
 }
 
 .ai-status {
@@ -116,6 +163,33 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 10px;
+    /* leave space at the bottom so absolute-bottom controls don't overlap list items */
+    padding-bottom: 140px;
+}
+
+/* Center project name under the Writingway header */
+.project-info {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    text-align: center;
+}
+
+.project-info>div {
+    display: block;
+}
+
+.project-info .menu-button {
+    position: absolute;
+    right: 8px;
+    top: 12px;
+}
+
+.project-info .action-menu {
+    position: absolute;
+    right: 8px;
+    top: 36px;
+    left: auto;
 }
 
 .chapter-item {
@@ -123,14 +197,18 @@ body {
 }
 
 .chapter-header {
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: transparent;
     color: var(--text-secondary);
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
-    font-weight: 700;
+    font-weight: 800;
+    font-size: 18px;
+    border-radius: 6px;
+    border-left: 4px solid transparent;
+    transition: background 0.15s ease, color 0.15s ease, border-left-color 0.15s ease;
 }
 
 /* Caret for expand/collapse with smooth rotation */
@@ -162,6 +240,12 @@ body {
 .chapter-header:hover .item-actions,
 .scene-item:hover .item-actions {
     opacity: 1;
+}
+
+.chapter-header:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-left-color: var(--accent);
 }
 
 .move-select {
@@ -276,20 +360,26 @@ body {
 .scene-item {
     padding: 12px 15px;
     margin-bottom: 5px;
-    background: var(--bg-tertiary);
+    background: transparent;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s;
     border: 2px solid transparent;
+    border-left: 4px solid transparent;
 }
 
 .scene-item:hover {
-    background: var(--bg-primary);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-left-color: var(--accent);
 }
 
 .scene-item.active {
     border-color: var(--accent);
-    background: var(--bg-primary);
+    background: linear-gradient(90deg, rgba(74, 158, 255, 0.06), rgba(74, 158, 255, 0.02));
+    border-left: 6px solid var(--accent);
+    padding-left: 12px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 .scene-item .scene-title {
@@ -303,20 +393,68 @@ body {
 }
 
 .add-scene-btn {
-    margin: 10px;
-    padding: 12px;
-    background: var(--accent);
-    color: white;
+    margin: 6px;
+    padding: 8px;
+    width: 56px;
+    height: 56px;
+    background: transparent;
+    color: var(--accent);
     border: none;
-    border-radius: 6px;
+    border-radius: 10px;
     cursor: pointer;
     font-size: 14px;
-    font-weight: 600;
-    transition: background 0.2s;
+    transition: background 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .add-scene-btn:hover {
-    background: var(--accent-hover);
+    background: rgba(58, 127, 217, 0.10);
+    transform: translateY(-2px);
+}
+
+.add-scene-btn:active {
+    transform: translateY(-1px);
+}
+
+.add-scene-btn svg {
+    display: block;
+    width: 28px;
+    height: 28px;
+    color: inherit;
+}
+
+/* Position the icon buttons centered vertically in the sidebar */
+.sidebar-actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 0;
+    z-index: 3;
+}
+
+@media (max-width: 420px) {
+    .add-scene-btn {
+        width: 48px;
+        height: 48px;
+    }
+
+    .add-scene-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+/* Make sure buttons are still usable on narrow sidebars */
+@media (max-width: 420px) {
+    .add-scene-btn {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
 }
 
 /* Editor Area */
@@ -382,7 +520,6 @@ body {
     color: var(--text-secondary);
 }
 
-/* Beat Panel */
 .beat-panel {
     background: var(--bg-secondary);
     border-top: 1px solid var(--border);
@@ -419,6 +556,8 @@ body {
     outline: none;
     border-color: var(--accent);
 }
+
+/* (kept original .context-info below) */
 
 .generate-btn {
     padding: 12px 24px;

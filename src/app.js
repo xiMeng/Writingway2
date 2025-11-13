@@ -140,6 +140,61 @@ db.version(4).stores({
     // noop migration; new installs will get empty compendium
 });
 
+// Add compound index for compendium queries to speed up category lookups
+// This creates a compound index on [projectId+category] which Dexie will use
+// when querying by both fields together (e.g., { projectId, category }).
+// Use a new DB version so existing installs get the index via Dexie migration.
+db.version(5).stores({
+    compendium: 'id, [projectId+category], projectId, category, title, modified, tags'
+}).upgrade(async tx => {
+    // noop: index addition handled by Dexie
+});
+
+// Expose the global Dexie instance for debugging and console usage
+try { window.db = window.db || db; } catch (e) { /* ignore in non-browser env */ }
+
+// Dev helpers: wait for Alpine app to be attached, force-save current scene, and dump DB
+window.__waitForApp = function (timeout = 5000) {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+        (function check() {
+            try {
+                const el = document.querySelector('[x-data="app"]');
+                const app = (el && el.__x && el.__x.$data) ? el.__x.$data : null;
+                if (app) return resolve(app);
+            } catch (e) { /* ignore */ }
+            if (Date.now() - start > timeout) return reject(new Error('timeout waiting for app'));
+            setTimeout(check, 100);
+        })();
+    });
+};
+
+window.__forceSave = async function () {
+    const app = await window.__waitForApp().catch(e => null);
+    if (!app) throw new Error('app not ready');
+    if (window.Save && typeof window.Save.saveScene === 'function') {
+        return await window.Save.saveScene(app);
+    }
+    if (typeof app.saveScene === 'function') return await app.saveScene();
+    throw new Error('no save function available');
+};
+
+window.__dumpWritingway = async function () {
+    try {
+        const d = window.db || new Dexie('WritingwayDB');
+        await d.open();
+        console.log('projects:', await d.projects.toArray());
+        console.log('chapters:', await d.chapters.toArray());
+        console.log('scenes:', await d.scenes.toArray());
+        console.log('content:', await d.content.toArray());
+        d.close();
+    } catch (e) {
+        console.error('dump err', e);
+    }
+};
+
+// Note: Dexie will open when first used; no automatic recovery toggles are present.
+
 // Alpine.js App
 document.addEventListener('alpine:init', () => {
     Alpine.data('app', () => ({
@@ -187,7 +242,15 @@ document.addEventListener('alpine:init', () => {
         promptEditorContent: '',
         newPromptTitle: '',
 
+        // Compendium state
+        compendiumCategories: ['lore', 'characters', 'places', 'items', 'notes'],
+        compendiumCounts: {},
+        currentCompCategory: 'lore',
+        compendiumList: [],
+        currentCompEntry: null,
+
         // AI State
+        compendiumSaveStatus: '',
         aiWorker: null,
         aiStatus: 'loading', // loading, ready, error
         aiStatusText: 'Initializing...',
@@ -210,6 +273,8 @@ document.addEventListener('alpine:init', () => {
             // Load projects and last project selection, but don't let DB failures block AI initialization
             try {
                 await this.loadProjects();
+                // One-time migration: ensure scenes have a projectId so they are discoverable
+                try { await this.migrateMissingSceneProjectIds(); } catch (e) { /* ignore */ }
                 // restore last selected project from localStorage if present
                 const last = localStorage.getItem('writingway:lastProject');
                 if (last && this.projects.find(p => p.id === last)) {
@@ -356,6 +421,33 @@ document.addEventListener('alpine:init', () => {
             this.projects = await db.projects.orderBy('created').reverse().toArray();
         },
 
+        // Fix scenes that may have been saved without a projectId (legacy or accidental overwrite).
+        // Uses chapter.projectId when available, otherwise assigns the first project in the DB.
+        async migrateMissingSceneProjectIds() {
+            try {
+                const scenes = await db.scenes.toArray();
+                if (!scenes || scenes.length === 0) return;
+                const projects = await db.projects.toArray();
+                const defaultProject = projects && projects[0] ? projects[0].id : null;
+
+                for (const s of scenes) {
+                    if (!s.projectId) {
+                        let projectId = null;
+                        if (s.chapterId) {
+                            const ch = await db.chapters.get(s.chapterId).catch(() => null);
+                            if (ch && ch.projectId) projectId = ch.projectId;
+                        }
+                        if (!projectId && defaultProject) projectId = defaultProject;
+                        if (projectId) {
+                            await db.scenes.update(s.id, { projectId });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('migrateMissingSceneProjectIds failed:', e);
+            }
+        },
+
         async selectProject(projectId) {
             const proj = await db.projects.get(projectId);
             if (!proj) return;
@@ -385,6 +477,65 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        // Export the current project as a ZIP file containing scenes (Markdown), metadata, and compendium
+        async exportProject() {
+            if (!this.currentProject) return;
+            try {
+                if (typeof JSZip === 'undefined') {
+                    alert('ZIP export library is not loaded.');
+                    return;
+                }
+
+                const zip = new JSZip();
+                const pid = this.currentProject.id;
+
+                const meta = { project: this.currentProject, chapters: [], exportedAt: new Date().toISOString() };
+
+                const chapters = await db.chapters.where('projectId').equals(pid).sortBy('order');
+                for (const ch of chapters) {
+                    const chapterObj = { id: ch.id, title: ch.title, order: ch.order, scenes: [] };
+                    const scenes = await db.scenes.where('projectId').equals(pid).and(s => s.chapterId === ch.id).sortBy('order');
+                    for (const s of scenes) {
+                        // fetch content robustly (primary lookup, then sceneId fallback)
+                        let content = null;
+                        try { content = await db.content.get(s.id); } catch (e) { content = null; }
+                        if (!content) {
+                            try { content = await db.content.where('sceneId').equals(s.id).first(); } catch (e) { content = null; }
+                        }
+                        const text = content ? (content.text || '') : '';
+
+                        const safeTitle = (s.title || 'scene').replace(/[^a-z0-9\-_. ]/ig, '_').slice(0, 80).trim();
+                        const filename = `scenes/${String(s.order).padStart(2, '0')}-${safeTitle || s.id}.md`;
+                        chapterObj.scenes.push({ id: s.id, title: s.title, order: s.order, filename });
+                        zip.file(filename, text || '');
+                    }
+                    meta.chapters.push(chapterObj);
+                }
+
+                // include compendium and other project-level stores
+                try {
+                    const comp = await db.compendium.where('projectId').equals(pid).toArray();
+                    zip.file('compendium.json', JSON.stringify(comp || [], null, 2));
+                } catch (e) {
+                    // ignore if compendium doesn't exist
+                }
+
+                // include raw project JSON/metadata
+                zip.file('metadata.json', JSON.stringify(meta, null, 2));
+
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const nameSafe = (this.currentProject.name || 'project').replace(/[^a-z0-9\-_. ]/ig, '_').slice(0, 80).trim();
+                const fname = `${nameSafe || 'writingway_project'}.zip`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Export failed:', e);
+                alert('Export failed: ' + (e && e.message ? e.message : e));
+            }
+        },
+
         // Prompts management
         async loadPrompts() {
             // Delegate to prompts module
@@ -393,6 +544,100 @@ document.addEventListener('alpine:init', () => {
             }
             // Fallback: no-op
             this.prompts = [];
+        },
+
+        // Compendium methods
+        async openCompendium() {
+            this.showCodexPanel = true;
+            // load counts and default category
+            await this.loadCompendiumCounts();
+            await this.loadCompendiumCategory(this.currentCompCategory);
+        },
+
+        async loadCompendiumCounts() {
+            try {
+                const counts = {};
+                for (const c of this.compendiumCategories) {
+                    const list = await (window.Compendium ? window.Compendium.listByCategory(this.currentProject.id, c) : []);
+                    counts[c] = list.length;
+                }
+                this.compendiumCounts = counts;
+            } catch (e) {
+                console.warn('Failed to load compendium counts:', e);
+                this.compendiumCounts = {};
+            }
+        },
+
+        async loadCompendiumCategory(category) {
+            if (!this.currentProject) return;
+            this.currentCompCategory = category;
+            try {
+                if (window.Compendium && typeof window.Compendium.listByCategory === 'function') {
+                    this.compendiumList = await window.Compendium.listByCategory(this.currentProject.id, category) || [];
+                } else {
+                    this.compendiumList = [];
+                }
+                // clear current entry selection
+                this.currentCompEntry = null;
+                await this.loadCompendiumCounts();
+            } catch (e) {
+                console.error('Failed to load compendium category:', e);
+            }
+        },
+
+        async createCompendiumEntry(category) {
+            if (!this.currentProject) return;
+            const cat = category || this.currentCompCategory || this.compendiumCategories[0];
+            try {
+                const entry = await window.Compendium.createEntry(this.currentProject.id, { category: cat, title: 'New Entry', body: '' });
+                await this.loadCompendiumCategory(cat);
+                this.selectCompendiumEntry(entry.id);
+            } catch (e) {
+                console.error('Failed to create compendium entry:', e);
+            }
+        },
+
+        async selectCompendiumEntry(id) {
+            try {
+                const e = await window.Compendium.getEntry(id);
+                this.currentCompEntry = e || null;
+            } catch (err) {
+                console.error('Failed to load compendium entry:', err);
+            }
+        },
+
+        async saveCompendiumEntry() {
+            if (!this.currentCompEntry || !this.currentCompEntry.id) return;
+            try {
+                this.compendiumSaveStatus = 'Saving...';
+                const updates = {
+                    title: this.currentCompEntry.title || '',
+                    body: this.currentCompEntry.body || '',
+                    tags: JSON.parse(JSON.stringify(this.currentCompEntry.tags || []))
+                };
+                await window.Compendium.updateEntry(this.currentCompEntry.id, updates);
+                await this.loadCompendiumCategory(this.currentCompCategory);
+                await this.loadCompendiumCounts();
+                this.compendiumSaveStatus = 'Saved';
+                setTimeout(() => { this.compendiumSaveStatus = ''; }, 2000);
+            } catch (e) {
+                console.error('Failed to save compendium entry:', e);
+                this.compendiumSaveStatus = 'Error';
+                setTimeout(() => { this.compendiumSaveStatus = ''; }, 3000);
+            }
+        },
+
+        async deleteCompendiumEntry(id) {
+            if (!id) return;
+            if (!confirm('Delete this compendium entry?')) return;
+            try {
+                await window.Compendium.deleteEntry(id);
+                this.currentCompEntry = null;
+                await this.loadCompendiumCategory(this.currentCompCategory);
+                await this.loadCompendiumCounts();
+            } catch (e) {
+                console.error('Failed to delete compendium entry:', e);
+            }
         },
 
         async createPrompt(category) {
@@ -440,7 +685,22 @@ document.addEventListener('alpine:init', () => {
                     .sortBy('order');
 
                 for (let s of scenesForChapter) {
-                    const content = await db.content.get(s.id);
+                    // Primary lookup by primary key (sceneId), but some restored DBs may have
+                    // stored content records with a different primary key. Use a fallback
+                    // lookup by the `sceneId` property if primary-key get() returns nothing.
+                    let content = null;
+                    try {
+                        content = await db.content.get(s.id);
+                    } catch (e) {
+                        content = null;
+                    }
+                    if (!content) {
+                        try {
+                            content = await db.content.where('sceneId').equals(s.id).first();
+                        } catch (e) {
+                            content = null;
+                        }
+                    }
                     s.wordCount = content ? content.wordCount : 0;
                     // load persisted generation options into scene if present
                     s.povCharacter = s.povCharacter || s.povCharacter === '' ? s.povCharacter : '';
@@ -568,7 +828,15 @@ document.addEventListener('alpine:init', () => {
 
         async loadScene(sceneId) {
             const scene = await db.scenes.get(sceneId);
-            const content = await db.content.get(sceneId);
+            // Load content for the scene, using a primary-key get() first and a
+            // fallback where('sceneId') lookup for robustness across DB variants.
+            let content = null;
+            try {
+                content = await db.content.get(sceneId);
+            } catch (e) { content = null; }
+            if (!content) {
+                try { content = await db.content.where('sceneId').equals(sceneId).first(); } catch (e) { content = null; }
+            }
 
             this.currentScene = {
                 ...scene,

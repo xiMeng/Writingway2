@@ -7,6 +7,7 @@
     <title>Writingway 2.0</title>
     <!-- Note: This file should be named main.html and opened via start.bat -->
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script defer src="src/prompts.js"></script>
     <script defer src="src/generation.js"></script>
     <script defer src="src/ai.js"></script>
@@ -34,7 +35,8 @@
 
                     <!-- AI Status -->
                     <div class="ai-status">
-                        <div class="ai-status-item" style="cursor:pointer;" @click="showAISettings = true">
+                        <div class="ai-status-item" style="cursor:pointer;" @click="showAISettings = true"
+                            title="Open AI settings" aria-label="Open AI settings" role="button">
                             <div class="status-dot" :class="aiStatus"></div>
                             <span x-text="aiStatusText"></span>
                         </div>
@@ -42,11 +44,15 @@
 
                     <div class="project-info" x-data="{ openMenu:false }" style="position:relative;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                            <h2 x-text="currentProject.name" style="margin:0;padding-right:8px;"></h2>
+                            <h2 style="margin:0;padding-right:8px;">
+                                <button class="project-name-button" @click.stop="openCompendium()"
+                                    title="Open Compendium"
+                                    style="background:none;border:none;padding:0;font-size:1.1em;color:inherit;cursor:pointer;">
+                                    <span x-text="currentProject.name"></span>
+                                </button>
+                            </h2>
 
                             <div style="display:flex;align-items:center;gap:6px;">
-                                <button class="btn btn-secondary" @click.stop="showCodexPanel = true"
-                                    title="Codex">Codex</button>
                                 <button class="menu-button" @click.stop="openMenu = !openMenu"
                                     title="Project menu">⋯</button>
                                 <div x-show="openMenu" x-cloak @click.away="openMenu = false" x-transition
@@ -66,6 +72,8 @@
                                         </template>
                                     </div>
                                     <div style="border-top:1px solid var(--border);margin:6px 0"></div>
+                                    <button @click.stop="exportProject(); openMenu=false">Export project (ZIP)</button>
+                                    <div style="margin-top:6px"></div>
                                     <button @click.stop="showNewProjectModal = true; openMenu=false">New
                                         project</button>
                                 </div>
@@ -161,13 +169,24 @@
                         </template>
                     </div>
 
-                    <div style="display:flex;flex-direction:column;padding:10px;gap:8px;">
-                        <button class="add-scene-btn" @click="openNewSceneModal()">
-                            + New Scene
+                    <div class="sidebar-actions"
+                        style="display:flex;flex-direction:row;padding:10px;gap:8px;align-items:center;">
+                        <button class="add-scene-btn" @click="openNewChapterModal()" aria-label="New chapter"
+                            title="New Chapter">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
+                                    fill="currentColor" />
+                            </svg>
                         </button>
 
-                        <button class="add-scene-btn" @click="openNewChapterModal()">
-                            + New Chapter
+                        <button class="add-scene-btn" @click="openNewSceneModal()" aria-label="New scene"
+                            title="New Scene">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path
+                                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM14 3.5L18.5 8H15a1 1 0 0 1-1-1V3.5z"
+                                    fill="currentColor" />
+                                <path d="M8 12h8v2H8v-2zm0 4h5v2H8v-2z" fill="currentColor" />
+                            </svg>
                         </button>
                     </div>
                 </div>
@@ -423,19 +442,78 @@
             </div>
         </div>
 
-        <!-- Codex Slide Panel -->
+        <!-- Compendium Slide Panel -->
         <div class="slide-panel-right" :class="{ 'open': showCodexPanel }" x-cloak aria-hidden="true">
             <div class="slide-panel-header">
-                <h3 style="margin:0;">Codex</h3>
+                <h3 style="margin:0;">Compendium</h3>
                 <div>
                     <button class="btn btn-secondary" @click="showCodexPanel = false">Close</button>
                 </div>
             </div>
             <div class="slide-panel-body">
-                <p style="color:var(--text-secondary);">Story bible placeholder. Add character bios and world notes here
-                    later.</p>
-                <textarea
-                    style="width:100%;height:100%;padding:8px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);border-radius:6px;">Codex notes go here.</textarea>
+                <div style="display:flex;gap:12px;height:100%;">
+                    <div style="width:35%;overflow:auto;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <strong style="color:var(--text-primary);">Categories</strong>
+                            <button class="btn btn-secondary" @click="createCompendiumEntry(currentCompCategory)"
+                                title="New entry">+</button>
+                        </div>
+
+                        <template x-for="cat in compendiumCategories" :key="cat">
+                            <div style="margin-bottom:12px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
+                                    @click="loadCompendiumCategory(cat)">
+                                    <div style="text-transform:capitalize;font-weight:700;color:var(--text-primary);"
+                                        x-text="cat"></div>
+                                    <div style="font-size:12px;color:var(--text-secondary);"
+                                        x-text="(compendiumCounts[cat] || 0)"></div>
+                                </div>
+                                <div x-show="currentCompCategory === cat" x-cloak style="margin-top:6px;">
+                                    <template x-for="e in compendiumList" :key="e.id">
+                                        <div @click="selectCompendiumEntry(e.id)"
+                                            :class="{ 'active': currentCompEntry && currentCompEntry.id === e.id }"
+                                            style="padding:8px;border-radius:6px;background:var(--bg-tertiary);margin-bottom:6px;cursor:pointer;">
+                                            <div style="font-weight:600;color:var(--text-primary);" x-text="e.title">
+                                            </div>
+                                            <div style="font-size:11px;color:var(--text-secondary);"
+                                                x-text="new Date(e.modified).toLocaleString()"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div style="flex:1;display:flex;flex-direction:column;">
+                        <div style="flex:0 0 auto;margin-bottom:6px;">
+                            <template x-if="!currentCompEntry">
+                                <div style="color:var(--text-secondary);">Select an entry or create a new one.</div>
+                            </template>
+                            <template x-if="currentCompEntry">
+                                <div>
+                                    <input type="text" x-model="currentCompEntry.title" placeholder="Entry title"
+                                        style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);border-radius:6px;margin-bottom:6px;">
+                                </div>
+                            </template>
+                        </div>
+                        <div style="flex:1;overflow:auto;">
+                            <template x-if="currentCompEntry">
+                                <textarea x-model="currentCompEntry.body" placeholder="Write compendium entry body here"
+                                    style="width:100%;height:100%;padding:8px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);border-radius:6px;"></textarea>
+                            </template>
+                        </div>
+                        <div style="flex:0 0 auto;display:flex;gap:8px;margin-top:8px;align-items:center;">
+                            <button class="btn btn-primary" @click="saveCompendiumEntry"
+                                :disabled="!currentCompEntry">Save</button>
+                            <button class="btn btn-secondary" @click="deleteCompendiumEntry(currentCompEntry.id)"
+                                x-show="currentCompEntry">Delete</button>
+                            <span style="margin-left:8px;font-size:13px;color:var(--text-secondary);"
+                                class="compendium-save-status"
+                                :class="{ 'saving': compendiumSaveStatus === 'Saving...' }"
+                                x-text="compendiumSaveStatus"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 

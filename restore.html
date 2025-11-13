@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Writingway DB Restore Utility</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+            padding: 18px;
+            color: #111;
+            background: #f7f7fb
+        }
+
+        h1 {
+            margin-top: 0
+        }
+
+        .panel {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+            margin-bottom: 12px
+        }
+
+        textarea {
+            width: 100%;
+            height: 260px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background: #fff;
+            cursor: pointer
+        }
+
+        button.primary {
+            background: #0069ff;
+            color: white;
+            border-color: #0069ff
+        }
+
+        button.warn {
+            background: #ff6b6b;
+            color: white;
+            border-color: #ff6b6b
+        }
+
+        pre {
+            background: #0f1724;
+            color: #d1d5db;
+            padding: 10px;
+            border-radius: 6px;
+            overflow: auto;
+            height: 160px
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .muted {
+            color: #6b7280
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+</head>
+
+<body>
+    <h1>Writingway — DB Restore Utility</h1>
+    <div class="panel">
+        <div class="muted">This tool helps you safely delete the existing <code>WritingwayDB</code> in this browser
+            profile and restore it from a JSON dump you paste below. <strong>Do not proceed unless you have the JSON
+                dump copied from the app console (between JSON_START and JSON_END)</strong>.</div>
+    </div>
+
+    <div class="panel">
+        <h3>1) Paste JSON dump</h3>
+        <textarea id="dump" placeholder="Paste JSON here (between JSON_START and JSON_END)"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="validate">Validate JSON</button>
+            <button id="download">Download dump as file</button>
+            <span id="validateResult" class="muted"></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>2) Delete DB and restore</h3>
+        <div class="muted">When you click <strong>Delete and Restore</strong> the script will:</div>
+        <ol>
+            <li>Confirm you want to proceed.</li>
+            <li>Delete <code>WritingwayDB</code> (this is the destructive step).</li>
+            <li>Create a fresh DB and import the pasted data.</li>
+            <li>Set <code>localStorage['writingway:lastProject']</code> to the first project id (if present).</li>
+        </ol>
+        <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="deleteRestore" class="warn">Delete DB and Restore</button>
+            <button id="createBackupDb">Create recovered DB (non-destructive)</button>
+            <span id="opResult" class="muted"></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Logs</h3>
+        <pre id="log">Ready.</pre>
+    </div>
+
+    <script>
+        const dumpEl = document.getElementById('dump');
+        const logEl = document.getElementById('log');
+        const validateEl = document.getElementById('validate');
+        const downloadEl = document.getElementById('download');
+        const deleteRestoreEl = document.getElementById('deleteRestore');
+        const createBackupDbEl = document.getElementById('createBackupDb');
+        const validateResult = document.getElementById('validateResult');
+        function log(...args) { console.log(...args); logEl.textContent += '\n' + args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a))).join(' '); logEl.scrollTop = logEl.scrollHeight }
+
+        function parseDump() {
+            const txt = dumpEl.value.trim();
+            if (!txt) throw new Error('No JSON present in textarea');
+            try { return JSON.parse(txt); } catch (e) { throw new Error('Invalid JSON: ' + (e && e.message)); }
+        }
+
+        validateEl.addEventListener('click', () => {
+            validateResult.textContent = '';
+            try {
+                const dump = parseDump();
+                const keys = Object.keys(dump);
+                validateResult.textContent = 'Valid JSON — stores: ' + keys.join(', ');
+                log('Validated dump stores:', keys);
+            } catch (e) {
+                validateResult.textContent = 'Invalid JSON — see logs';
+                log('Validate error', e.message || e);
+            }
+        });
+
+        downloadEl.addEventListener('click', () => {
+            try {
+                const txt = dumpEl.value;
+                if (!txt) { alert('Paste the JSON dump first'); return; }
+                const blob = new Blob([txt], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'writingway_dump.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                log('Downloaded dump to writingway_dump.json');
+            } catch (e) { log('Download error', e); }
+        });
+
+        async function performRestore(opts = { dbName: 'WritingwayDB', createBackup: false, backupName: 'WritingwayDB_recovered' }) {
+            try {
+                const dump = parseDump();
+                log('Parsed dump stores:', Object.keys(dump));
+
+                if (opts.createBackup) {
+                    // create a new DB name and populate it without deleting the original
+                    const dbName = opts.backupName || 'WritingwayDB_recovered';
+                    log('Creating backup DB (non-destructive) named', dbName);
+                    await populateDexie(dbName, dump);
+                    log('Backup DB created:', dbName);
+                    return { ok: true };
+                }
+
+                // Confirm
+                const c1 = confirm('This will DELETE the existing IndexedDB database "WritingwayDB" in this browser profile and replace it with the pasted dump. Are you sure?');
+                if (!c1) { log('User aborted'); return { ok: false }; }
+                const c2 = confirm('FINAL CONFIRM — Delete and restore now? Click OK to proceed.');
+                if (!c2) { log('User aborted'); return { ok: false }; }
+
+                // delete
+                log('Deleting existing DB WritingwayDB...');
+                await new Promise((res, rej) => {
+                    const req = indexedDB.deleteDatabase('WritingwayDB');
+                    req.onsuccess = () => { log('indexedDB.deleteDatabase success'); res(); };
+                    req.onerror = (e) => { log('indexedDB.deleteDatabase error', e); rej(e); };
+                    req.onblocked = () => { log('Delete blocked (close other tabs)'); };
+                });
+
+                // create and populate
+                log('Creating fresh DB and populating...');
+                await populateDexie('WritingwayDB', dump);
+
+                // attempt to set lastProject
+                if (dump.projects && dump.projects.length) {
+                    try {
+                        localStorage.setItem('writingway:lastProject', dump.projects[0].id);
+                        log('Set writingway:lastProject to', dump.projects[0].id);
+                    } catch (e) { log('Failed to set lastProject in localStorage', e); }
+                }
+
+                log('Restore complete. Please reload the main app page (e.g., open main.html or reload the existing tab).');
+                return { ok: true };
+            } catch (err) {
+                log('Restore failed', err && err.message ? err.message : err);
+                return { ok: false, error: err };
+            }
+        }
+
+        async function populateDexie(dbName, dump) {
+            // Use Dexie (loaded from CDN) to create a DB and bulk-put content
+            if (!window.Dexie) throw new Error('Dexie library not available');
+            const d = new Dexie(dbName);
+            // Define stores matching app schema (compatible)
+            d.version(1).stores({
+                projects: 'id, name, created, modified',
+                chapters: 'id, projectId, title, order, created, modified',
+                scenes: 'id, projectId, chapterId, title, order, created, modified',
+                content: 'sceneId, text, wordCount',
+                prompts: 'id, projectId, category, title, created, modified',
+                codex: 'id, projectId, title, created, modified',
+                compendium: 'id, projectId, category, title, modified, tags',
+                content_backups: 'id, sceneId, text, created'
+            });
+            await d.open();
+            // Use transaction to bulk put
+            await d.transaction('rw', d.projects, d.chapters, d.scenes, d.content, d.prompts, d.codex, d.compendium, d.content_backups, async () => {
+                if (dump.projects && dump.projects.length) await d.projects.bulkPut(dump.projects).catch(e => log('projects bulkPut err', e));
+                if (dump.chapters && dump.chapters.length) await d.chapters.bulkPut(dump.chapters).catch(e => log('chapters bulkPut err', e));
+                if (dump.scenes && dump.scenes.length) await d.scenes.bulkPut(dump.scenes).catch(e => log('scenes bulkPut err', e));
+                if (dump.content && dump.content.length) await d.content.bulkPut(dump.content).catch(e => log('content bulkPut err', e));
+                if (dump.prompts && dump.prompts.length) await d.prompts.bulkPut(dump.prompts).catch(e => log('prompts bulkPut err', e));
+                if (dump.codex && dump.codex.length) await d.codex.bulkPut(dump.codex).catch(e => log('codex bulkPut err', e));
+                if (dump.compendium && dump.compendium.length) await d.compendium.bulkPut(dump.compendium).catch(e => log('compendium bulkPut err', e));
+                if (dump.content_backups && dump.content_backups.length) await d.content_backups.bulkPut(dump.content_backups).catch(e => log('content_backups bulkPut err', e));
+            });
+            await d.close();
+            log('populateDexie finished for', dbName);
+        }
+
+        deleteRestoreEl.addEventListener('click', async () => {
+            deleteRestoreEl.disabled = true; deleteRestoreEl.textContent = 'Working...';
+            const res = await performRestore({ dbName: 'WritingwayDB', createBackup: false });
+            deleteRestoreEl.disabled = false; deleteRestoreEl.textContent = 'Delete DB and Restore';
+            if (res.ok) alert('Restore finished. Reload the main app page now.');
+        });
+
+        createBackupDbEl.addEventListener('click', async () => {
+            createBackupDbEl.disabled = true; createBackupDbEl.textContent = 'Working...';
+            const res = await performRestore({ createBackup: true, backupName: 'WritingwayDB_recovered' });
+            createBackupDbEl.disabled = false; createBackupDbEl.textContent = 'Create recovered DB (non-destructive)';
+            if (res.ok) alert('Backup DB created as WritingwayDB_recovered. You can open the app after changing DB name or inspect via DevTools.');
+        });
+
+        // Initialize
+        log('Ready. Paste JSON dump and click Validate to confirm.');
+    </script>
+</body>
+
+</html>
