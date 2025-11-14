@@ -219,6 +219,13 @@ document.addEventListener('alpine:init', () => {
         quickInsertedCompendium: [],
         // Map of compendium mention titles to IDs in current beat: {'Dog': 'id123', ...}
         beatCompendiumMap: {},
+        // Scene mention state (similar to compendium mentions)
+        showSceneSearch: false,
+        sceneSearchMatches: [],
+        sceneSearchSelectedIndex: 0,
+        quickInsertedScenes: [],
+        // Map of scene mention titles to IDs in current beat: {'Scene 1': 'id456', ...}
+        beatSceneMap: {},
         isGenerating: false,
         isSaving: false,
         saveStatus: 'Saved',
@@ -1883,19 +1890,31 @@ document.addEventListener('alpine:init', () => {
             }, 2000);
         },
 
-        // Beat quick-search handlers: detect @tokens, query compendium, and allow selecting entries
+        // Beat quick-search handlers: detect @tokens (compendium) and #tokens (scenes)
         async onBeatInput(e) {
             try {
                 const ta = e.target;
                 const pos = ta.selectionStart;
                 const text = this.beatInput || '';
 
-                // Find last '@' before cursor which is word-start (or after space)
+                // Check for # (scene mentions) first
+                const lastHash = text.lastIndexOf('#', pos - 1);
+                if (lastHash !== -1 && (lastHash === 0 || /\s/.test(text.charAt(lastHash - 1)))) {
+                    const q = text.substring(lastHash + 1, pos).trim();
+                    if (q && q.length >= 1) {
+                        await this.handleSceneSearch(q);
+                        return;
+                    }
+                }
+
+                // Check for @ (compendium mentions)
                 const lastAt = text.lastIndexOf('@', pos - 1);
                 try { console.debug('[onBeatInput] caret=', pos, 'textSlice=', text.substring(Math.max(0, pos - 20), pos + 5).replace(/\n/g, '\\n')); } catch (e) { }
                 if (lastAt === -1) {
                     this.showQuickSearch = false;
                     this.quickSearchMatches = [];
+                    this.showSceneSearch = false;
+                    this.sceneSearchMatches = [];
                     return;
                 }
 
@@ -1903,6 +1922,8 @@ document.addEventListener('alpine:init', () => {
                 if (lastAt > 0 && !/\s/.test(text.charAt(lastAt - 1))) {
                     this.showQuickSearch = false;
                     this.quickSearchMatches = [];
+                    this.showSceneSearch = false;
+                    this.sceneSearchMatches = [];
                     return;
                 }
 
@@ -1911,6 +1932,8 @@ document.addEventListener('alpine:init', () => {
                 if (!q || q.length < 1) {
                     this.showQuickSearch = false;
                     this.quickSearchMatches = [];
+                    this.showSceneSearch = false;
+                    this.sceneSearchMatches = [];
                     return;
                 }
 
@@ -1925,34 +1948,84 @@ document.addEventListener('alpine:init', () => {
                 this.quickSearchMatches = matches.slice(0, 20);
                 this.quickSearchSelectedIndex = 0;
                 this.showQuickSearch = this.quickSearchMatches.length > 0;
+                this.showSceneSearch = false;
             } catch (err) {
                 this.showQuickSearch = false;
                 this.quickSearchMatches = [];
+                this.showSceneSearch = false;
+                this.sceneSearchMatches = [];
+            }
+        },
+
+        async handleSceneSearch(query) {
+            try {
+                const pid = this.currentProject ? this.currentProject.id : null;
+                if (!pid) return;
+
+                // Get all scenes in project
+                const allScenes = await db.scenes.where('projectId').equals(pid).toArray();
+                const lower = query.toLowerCase();
+
+                // Filter by title match
+                let matches = allScenes.filter(s => (s.title || '').toLowerCase().includes(lower));
+
+                // Sort: current chapter scenes first, then others
+                const currentChapterId = this.currentChapter?.id;
+                matches.sort((a, b) => {
+                    const aIsCurrent = a.chapterId === currentChapterId;
+                    const bIsCurrent = b.chapterId === currentChapterId;
+                    if (aIsCurrent && !bIsCurrent) return -1;
+                    if (!aIsCurrent && bIsCurrent) return 1;
+                    return (a.order || 0) - (b.order || 0);
+                });
+
+                this.sceneSearchMatches = matches.slice(0, 15);
+                this.sceneSearchSelectedIndex = 0;
+                this.showSceneSearch = this.sceneSearchMatches.length > 0;
+                this.showQuickSearch = false;
+            } catch (err) {
+                console.error('Scene search error:', err);
+                this.showSceneSearch = false;
+                this.sceneSearchMatches = [];
             }
         },
 
         onBeatKey(e) {
             try {
-                if (!this.showQuickSearch) return;
+                const isSearching = this.showQuickSearch || this.showSceneSearch;
+                if (!isSearching) return;
+
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    this.quickSearchSelectedIndex = Math.min(this.quickSearchSelectedIndex + 1, (this.quickSearchMatches.length - 1));
+                    if (this.showQuickSearch) {
+                        this.quickSearchSelectedIndex = Math.min(this.quickSearchSelectedIndex + 1, (this.quickSearchMatches.length - 1));
+                    } else if (this.showSceneSearch) {
+                        this.sceneSearchSelectedIndex = Math.min(this.sceneSearchSelectedIndex + 1, (this.sceneSearchMatches.length - 1));
+                    }
                     return;
                 }
                 if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    this.quickSearchSelectedIndex = Math.max(0, this.quickSearchSelectedIndex - 1);
+                    if (this.showQuickSearch) {
+                        this.quickSearchSelectedIndex = Math.max(0, this.quickSearchSelectedIndex - 1);
+                    } else if (this.showSceneSearch) {
+                        this.sceneSearchSelectedIndex = Math.max(0, this.sceneSearchSelectedIndex - 1);
+                    }
                     return;
                 }
                 if (e.key === 'Escape') {
                     this.showQuickSearch = false;
+                    this.showSceneSearch = false;
                     return;
                 }
                 if (e.key === 'Enter') {
+                    e.preventDefault();
                     if (this.showQuickSearch && this.quickSearchMatches && this.quickSearchMatches.length > 0) {
-                        e.preventDefault();
                         const sel = this.quickSearchMatches[this.quickSearchSelectedIndex];
                         this.selectQuickMatch(sel);
+                    } else if (this.showSceneSearch && this.sceneSearchMatches && this.sceneSearchMatches.length > 0) {
+                        const sel = this.sceneSearchMatches[this.sceneSearchSelectedIndex];
+                        this.selectSceneMatch(sel);
                     }
                 }
             } catch (err) { /* ignore */ }
@@ -1984,6 +2057,54 @@ document.addEventListener('alpine:init', () => {
                     try { ta.focus(); ta.selectionStart = ta.selectionEnd = (before + insert).length; } catch (e) { }
                 });
             } catch (e) { console.error('selectQuickMatch error', e); }
+        },
+
+        selectSceneMatch(scene) {
+            try {
+                if (!scene || !scene.id) return;
+
+                // Check if scene has a valid summary
+                const hasSummary = scene.summary && scene.summary.length > 0;
+                const isStale = scene.summaryStale === true;
+
+                // Validate summary status
+                if (!hasSummary) {
+                    alert(`⚠️ Scene "${scene.title}" has no summary.\n\nPlease create a summary first by:\n1. Opening the scene's menu (...)\n2. Selecting "Summary"\n3. Clicking "Summarize" then "Save"`);
+                    this.showSceneSearch = false;
+                    return;
+                }
+
+                if (isStale) {
+                    const proceed = confirm(`⚠️ Scene "${scene.title}" has an outdated summary.\n\nThe summary may not reflect recent changes.\n\nDo you want to use it anyway?\n\n(Tip: Update the summary first for better results)`);
+                    if (!proceed) {
+                        this.showSceneSearch = false;
+                        return;
+                    }
+                }
+
+                // Replace the last #token before caret with #[Title] format
+                const ta = document.querySelector('.beat-input');
+                if (!ta) return;
+                const pos = ta.selectionStart;
+                const text = this.beatInput || '';
+                const lastHash = text.lastIndexOf('#', pos - 1);
+                if (lastHash === -1) return;
+                const before = text.substring(0, lastHash);
+                const after = text.substring(pos);
+                // Insert clean mention format: #[Title] with trailing space
+                const insert = `#[${scene.title}] `;
+                this.beatInput = before + insert + after;
+                // Store mapping of title to ID for later resolution
+                this.beatSceneMap[scene.title] = scene.id;
+                // remember inserted scene id for this beat (avoid duplicates)
+                if (!this.quickInsertedScenes.includes(scene.id)) this.quickInsertedScenes.push(scene.id);
+                // hide suggestions
+                this.showSceneSearch = false;
+                this.sceneSearchMatches = [];
+                this.$nextTick(() => {
+                    try { ta.focus(); ta.selectionStart = ta.selectionEnd = (before + insert).length; } catch (e) { }
+                });
+            } catch (e) { console.error('selectSceneMatch error', e); }
         },
 
         // Parse beatInput for @[Title] mentions and return resolved compendium rows
@@ -2019,6 +2140,38 @@ document.addEventListener('alpine:init', () => {
             } catch (e) { return []; }
         },
 
+        // Parse beatInput for #[Title] mentions and return resolved scene summaries
+        async resolveSceneSummariesFromBeat(beatText) {
+            try {
+                if (!beatText) return [];
+                const ids = new Set();
+
+                // Parse #[Title] mentions and look up IDs from our mapping
+                const reMention = /#\[([^\]]+)\]/g;
+                let m;
+                while ((m = reMention.exec(beatText)) !== null) {
+                    const title = m[1];
+                    if (this.beatSceneMap[title]) {
+                        ids.add(this.beatSceneMap[title]);
+                    }
+                }
+
+                const out = [];
+                for (const id of ids) {
+                    try {
+                        const scene = await db.scenes.get(id);
+                        if (scene && scene.summary) {
+                            out.push({
+                                title: scene.title,
+                                summary: scene.summary
+                            });
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+                return out;
+            } catch (e) { return []; }
+        },
+
 
 
         // Temporary: build and show the exact prompt that will be sent to the LLM.
@@ -2036,12 +2189,15 @@ document.addEventListener('alpine:init', () => {
                 // Resolve compendium entries referenced in beat and include them in options
                 let compEntries = [];
                 try { compEntries = await this.resolveCompendiumEntriesFromBeat(this.beatInput || ''); } catch (e) { compEntries = []; }
+                // Resolve scene summaries referenced in beat
+                let sceneSummaries = [];
+                try { sceneSummaries = await this.resolveSceneSummariesFromBeat(this.beatInput || ''); } catch (e) { sceneSummaries = []; }
 
                 let prompt;
                 if (window.Generation && typeof window.Generation.buildPrompt === 'function') {
                     // DEBUG: log resolved prose info and options
                     try { console.debug('[preview] proseInfo=', proseInfo); } catch (e) { }
-                    const optsPreview = { povCharacter: this.povCharacter, pov: this.pov, tense: this.tense, prosePrompt: prosePromptText, compendiumEntries: compEntries, preview: true };
+                    const optsPreview = { povCharacter: this.povCharacter, pov: this.pov, tense: this.tense, prosePrompt: prosePromptText, compendiumEntries: compEntries, sceneSummaries: sceneSummaries, preview: true };
                     try { console.debug('[preview] buildPrompt opts:', { proseType: typeof optsPreview.prosePrompt, len: optsPreview.prosePrompt ? optsPreview.prosePrompt.length : 0 }); } catch (e) { }
                     try { console.debug('[preview] prosePrompt raw:', JSON.stringify(optsPreview.prosePrompt)); } catch (e) { }
                     prompt = window.Generation.buildPrompt(this.beatInput, this.currentScene?.content || '', optsPreview);
@@ -2334,10 +2490,14 @@ document.addEventListener('alpine:init', () => {
                     // Resolve compendium entries referenced in beat and include them in options
                     let compEntries = [];
                     try { compEntries = await this.resolveCompendiumEntriesFromBeat(this.beatInput || ''); } catch (e) { compEntries = []; }
+                    // Resolve scene summaries referenced in beat
+                    let sceneSummaries = [];
+                    try { sceneSummaries = await this.resolveSceneSummariesFromBeat(this.beatInput || ''); } catch (e) { sceneSummaries = []; }
                     // DEBUG: log resolved prose info for generation
                     try { console.debug('[generate] proseInfo=', proseInfo); } catch (e) { }
                     try { console.debug('[generate] prosePrompt raw:', JSON.stringify(prosePromptText)); } catch (e) { }
-                    const genOpts = { povCharacter: this.povCharacter, pov: this.pov, tense: this.tense, prosePrompt: prosePromptText, compendiumEntries: compEntries };
+                    try { console.debug('[generate] sceneSummaries:', sceneSummaries); } catch (e) { }
+                    const genOpts = { povCharacter: this.povCharacter, pov: this.pov, tense: this.tense, prosePrompt: prosePromptText, compendiumEntries: compEntries, sceneSummaries: sceneSummaries };
                     try { console.debug('[generate] buildPrompt opts:', { proseType: typeof genOpts.prosePrompt, len: genOpts.prosePrompt ? genOpts.prosePrompt.length : 0 }); } catch (e) { }
                     prompt = window.Generation.buildPrompt(this.beatInput, this.currentScene?.content || '', genOpts);
                     try { console.debug('[generate] builtPrompt preview:', String(prompt).slice(0, 600).replace(/\n/g, '\\n')); } catch (e) { }

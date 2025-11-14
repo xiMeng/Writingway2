@@ -1208,6 +1208,29 @@ body {
     }
 }
 
+/* Quick-search and scene-search dropdown item styles */
+.quick-search-item,
+.scene-search-item {
+    transition: all 0.15s ease;
+}
+
+.quick-search-item:hover,
+.scene-search-item:hover,
+.quick-search-item.active,
+.scene-search-item.active {
+    background: rgba(74, 158, 255, 0.1);
+    transform: translateX(2px);
+}
+
+.scene-search-item {
+    border-left: 2px solid transparent;
+}
+
+.scene-search-item:hover,
+.scene-search-item.active {
+    border-left-color: var(--accent-blue, #60a5fa);
+}
+
 /* Summary Panel Styling - similar to compendium/prompts panels */
 .slide-panel-right.summary-panel {
     border-left: 1px solid rgba(74, 158, 255, 0.08);

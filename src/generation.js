@@ -47,9 +47,28 @@
             }
         }
 
+        // If scene summaries are provided, include them as context before the BEAT.
+        // For preview mode we omit them to keep the overlay concise.
+        let sceneSummariesText = '';
+        if (!options.preview && options.sceneSummaries && Array.isArray(options.sceneSummaries) && options.sceneSummaries.length > 0) {
+            sceneSummariesText = '\n\nPREVIOUS SCENES:\n';
+            for (const scene of options.sceneSummaries) {
+                try {
+                    const title = scene.title || 'Untitled Scene';
+                    const summary = scene.summary || '';
+                    if (summary) {
+                        sceneSummariesText += `\n-- ${title} --\n${summary}\n`;
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        }
+
         let userContent = `${contextText}${proseTemplateText}`;
         if (compendiumText) {
             userContent += compendiumText;
+        }
+        if (sceneSummariesText) {
+            userContent += sceneSummariesText;
         }
         userContent += `\n\nBEAT TO EXPAND:\n${beat}\n\nWrite the next 2-3 paragraphs:`;
 

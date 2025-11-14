@@ -256,6 +256,28 @@
                                     </template>
                                 </div>
                             </div>
+
+                            <div class="scene-search-dropdown" x-show="showSceneSearch" x-cloak
+                                style="position:relative;width:100%;">
+                                <div
+                                    style="position:absolute;bottom:100%;left:0;right:0;z-index:5000;background:var(--bg-primary);border:1px solid var(--accent-blue,#60a5fa);border-radius:6px;padding:6px;max-height:240px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4);margin-bottom:8px;">
+                                    <template x-for="(scene,si) in sceneSearchMatches" :key="scene.id">
+                                        <div class="scene-search-item"
+                                            :class="{ 'active': si === sceneSearchSelectedIndex }"
+                                            @click="selectSceneMatch(scene)"
+                                            style="padding:6px;border-radius:4px;cursor:pointer;">
+                                            <div style="display:flex;align-items:center;gap:6px;">
+                                                <span
+                                                    x-text="scene.hasSummary ? (scene.summaryStale ? '⚠️' : '✅') : '❌'"
+                                                    :title="scene.hasSummary ? (scene.summaryStale ? 'Summary is outdated' : 'Summary available') : 'No summary'"></span>
+                                                <span style="font-weight:600" x-text="scene.title"></span>
+                                            </div>
+                                            <div style="font-size:12px;color:var(--text-secondary);"
+                                                x-text="scene.chapterName || 'Unknown Chapter'"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="beat-controls"
