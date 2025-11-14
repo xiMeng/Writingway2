@@ -245,6 +245,8 @@ document.addEventListener('alpine:init', () => {
         showSummaryPanel: false,
         summaryText: '',
         summaryTargetSceneId: null,
+        selectedSummaryPromptId: null,
+        showSummaryPromptList: false,
 
         // Prompts / Codex state
         prompts: [],
@@ -913,10 +915,17 @@ document.addEventListener('alpine:init', () => {
         },
 
         // Placeholder: generate a quick summary from the scene content (client-side heuristic)
-        summarizeScene() {
+        async summarizeScene() {
             try {
                 const id = this.summaryTargetSceneId;
                 if (!id) return;
+
+                // Check if we should use AI or heuristic
+                const summaryPrompts = this.prompts.filter(p => p.category === 'summary');
+                const usePrompt = this.selectedSummaryPromptId
+                    ? summaryPrompts.find(p => p.id === this.selectedSummaryPromptId)
+                    : summaryPrompts[0]; // Use first summary prompt as default
+
                 // Take the scene text if loaded, fall back to scenes list
                 const scene = (this.scenes || []).find(s => s.id === id) || (this.currentScene && this.currentScene.id === id ? this.currentScene : null);
                 const text = (scene && scene.content) || (this.currentScene && this.currentScene.content) || '';
@@ -925,7 +934,39 @@ document.addEventListener('alpine:init', () => {
                     return;
                 }
 
-                // Simple heuristic: take first 2 sentences or first 200 chars
+                // If we have a summary prompt and AI is ready, use AI
+                if (usePrompt && window.Generation && this.aiStatus === 'ready') {
+                    try {
+                        this.summaryText = 'Generating summary...';
+                        const promptText = usePrompt.content || '';
+
+                        // Build proper messages array with system instruction and user content
+                        const messages = [
+                            { role: 'system', content: promptText },
+                            { role: 'user', content: `Please summarize the following scene text:\n\n${text}` }
+                        ];
+
+                        // Debug logging to verify which prompt is being used
+                        console.log('🎯 Summarizing with prompt:', usePrompt.title);
+                        console.log('📝 Prompt content:', promptText.slice(0, 100) + '...');
+                        console.log('📄 Scene length:', text.length, 'characters');
+
+                        let result = '';
+                        await window.Generation.streamGeneration(messages, (token) => {
+                            if (result === '' && this.summaryText === 'Generating summary...') {
+                                this.summaryText = '';
+                            }
+                            result += token;
+                            this.summaryText = result;
+                        }, this);
+                        return;
+                    } catch (aiError) {
+                        console.warn('AI summary failed, falling back to heuristic:', aiError);
+                        // Fall through to heuristic below
+                    }
+                }
+
+                // Fallback: Simple heuristic: take first 2 sentences or first 200 chars
                 const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
                 let summary = '';
                 if (sentences.length >= 2) {

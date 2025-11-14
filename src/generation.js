@@ -234,6 +234,11 @@
             };
         }
 
+        // Debug logging for API requests
+        console.log('🚀 API Request to:', provider);
+        console.log('📨 Messages being sent:', JSON.stringify(messages, null, 2));
+        console.log('⚙️ Temperature:', temp, 'Max Tokens:', maxTok);
+
         const response = await fetch(url, {
             method: 'POST',
             headers: headers,
