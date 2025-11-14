@@ -1,7 +1,8 @@
 // Save utilities for scenes. Exposes window.Save.saveScene(app)
 (function () {
-    async function saveScene(app) {
+    async function saveScene(app, opts) {
         if (!app) return false;
+        opts = opts || {};
         try {
             app.isSaving = true;
             app.saveStatus = 'Saving...';
@@ -54,12 +55,40 @@
             // If the content changed and there was an existing summary, mark the summary stale
             try {
                 const contentChanged = prevContent && (prevContent.text || '') !== (scene.content || '');
-                if (contentChanged && prevScene && prevScene.summary) {
+                // Only mark stale automatically during autosave events (not manual saves)
+                const willMarkStale = !!(contentChanged && prevScene && prevScene.summary && opts.autosave);
+                if (willMarkStale) {
                     scenePatch.summaryStale = true;
                 }
+                // (debug logs removed)
             } catch (e) { /* ignore */ }
 
-            await db.scenes.put(scenePatch);
+            // Use a safe merge update to avoid accidentally removing fields like `summary`.
+            async function safeMergeUpdate(id, patch) {
+                try {
+                    const cur = await db.scenes.get(id) || {};
+                    const merged = Object.assign({}, cur, patch, { id: id });
+                    await db.scenes.put(merged);
+                    return merged;
+                } catch (e) {
+                    // If put fails, try update as a fallback
+                    try { await db.scenes.update(id, patch); } catch (err) { throw err; }
+                    return await db.scenes.get(id);
+                }
+            }
+
+            let mergedScene = null;
+            try {
+                mergedScene = await safeMergeUpdate(scene.id, scenePatch);
+            } catch (e) {
+                // If safe merge fails, fallback to update/put already handled inside helper
+                try { mergedScene = await db.scenes.get(scene.id); } catch (err) { /* ignore */ }
+            }
+            // Debug: read back the scene from DB to ensure fields persisted
+            try {
+                // readback retained for optional error diagnostics (no log)
+                const dbScene = mergedScene || await db.scenes.get(scene.id);
+            } catch (e) { /* ignore */ }
 
             // Update in-memory lists
             try {
@@ -85,9 +114,10 @@
                             const ss2 = app.scenes.find((x) => x.id === scene.id);
                             if (ss2) ss2.summaryStale = true;
                         }
-                        if (this.currentScene && this.currentScene.id === scene.id) this.currentScene.summaryStale = true;
+                        if (app.currentScene && app.currentScene.id === scene.id) app.currentScene.summaryStale = true;
                     } catch (e) { /* ignore */ }
                 }
+                // (debug logs removed)
             } catch (e) { /* ignore */ }
 
             app.saveStatus = 'Saved';

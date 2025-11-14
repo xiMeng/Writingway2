@@ -515,7 +515,16 @@ document.addEventListener('alpine:init', () => {
                 const id = this.summaryTargetSceneId;
                 if (!id) return;
                 // update DB (create/overwrite summary field and summaryUpdated)
-                await db.scenes.update(id, { summary: this.summaryText, summaryUpdated: new Date().toISOString(), summarySource: 'manual', summaryStale: false, modified: new Date() });
+                // Safe-merge update: read current record, merge summary fields, then put back.
+                try {
+                    const cur = await db.scenes.get(id) || {};
+                    const merged = Object.assign({}, cur, { summary: this.summaryText, summaryUpdated: new Date().toISOString(), summarySource: 'manual', summaryStale: false, modified: new Date(), id });
+                    await db.scenes.put(merged);
+                } catch (e) {
+                    console.warn('[App] saveSceneSummary write/readback failed', e);
+                }
+
+                // (watcher removed)
 
                 // Update in-memory scenes list
                 const s = (this.scenes || []).find(x => x.id === id);
@@ -1033,6 +1042,7 @@ document.addEventListener('alpine:init', () => {
                     s.povCharacter = s.povCharacter || s.povCharacter === '' ? s.povCharacter : '';
                     s.pov = s.pov || s.pov === '' ? s.pov : '3rd person limited';
                     s.tense = s.tense || s.tense === '' ? s.tense : 'past';
+                    // (debug log removed)
                 }
 
                 // attach scenes array to chapter for UI
@@ -1071,6 +1081,9 @@ document.addEventListener('alpine:init', () => {
 
             // Set currentChapter to first if none
             if (!this.currentChapter) this.currentChapter = this.chapters[0];
+
+            // Debug: dump scenes for current project so we can inspect summary fields after load
+            // (debug dump removed)
         },
 
         async createScene() {
@@ -1302,15 +1315,16 @@ document.addEventListener('alpine:init', () => {
             this.saveStatus = 'Unsaved';
             clearTimeout(this.saveTimeout);
             this.saveTimeout = setTimeout(() => {
-                this.saveScene();
+                this.saveScene({ autosave: true });
             }, 2000);
         },
 
-        async saveScene() {
+        async saveScene(opts) {
+            opts = opts || {};
             // Delegate to extracted save utility when available
             if (window.Save && typeof window.Save.saveScene === 'function') {
                 try {
-                    return await window.Save.saveScene(this);
+                    return await window.Save.saveScene(this, opts);
                 } catch (err) {
                     // If helper fails, fall through to fallback behavior
                     console.error('Save helper failed, falling back to inline save:', err);
@@ -1323,7 +1337,18 @@ document.addEventListener('alpine:init', () => {
             this.isSaving = true;
             this.saveStatus = 'Saving...';
 
+
             const wordCount = this.countWords(this.currentScene.content);
+
+            // Read previous records to detect content changes and mark summary stale if needed
+            let prevContent = null;
+            let prevScene = null;
+            try {
+                prevContent = await db.content.get(this.currentScene.id);
+            } catch (e) { /* ignore */ }
+            try {
+                prevScene = await db.scenes.get(this.currentScene.id);
+            } catch (e) { /* ignore */ }
 
             await db.content.put({
                 sceneId: this.currentScene.id,
@@ -1331,9 +1356,29 @@ document.addEventListener('alpine:init', () => {
                 wordCount: wordCount
             });
 
-            await db.scenes.update(this.currentScene.id, {
-                modified: new Date()
-            });
+            const scenePatch = { modified: new Date() };
+            try {
+                const contentChanged = prevContent && (prevContent.text || '') !== (this.currentScene.content || '');
+                // Only mark summary stale automatically during autosave events
+                if (contentChanged && prevScene && prevScene.summary && opts && opts.autosave) {
+                    scenePatch.summaryStale = true;
+                }
+                // (debug log removed)
+            } catch (e) { /* ignore */ }
+
+            // Safe-merge update to avoid removing fields like `summary`.
+            try {
+                const cur = await db.scenes.get(this.currentScene.id) || {};
+                const merged = Object.assign({}, cur, scenePatch, { id: this.currentScene.id });
+                await db.scenes.put(merged);
+                // (debug log removed)
+            } catch (e) {
+                // fallback to update if put fails
+                try { await db.scenes.update(this.currentScene.id, scenePatch); } catch (err) { console.warn('fallback update failed', err); }
+                try {
+                    const dbScene = await db.scenes.get(this.currentScene.id);
+                } catch (err) { /* ignore */ }
+            }
 
             // persist generation options per-scene
             try {
@@ -1349,6 +1394,7 @@ document.addEventListener('alpine:init', () => {
             const sceneIndex = this.scenes.findIndex(s => s.id === this.currentScene.id);
             if (sceneIndex !== -1) {
                 this.scenes[sceneIndex].wordCount = wordCount;
+                if (scenePatch.summaryStale) this.scenes[sceneIndex].summaryStale = true;
             }
 
             // Also update in chapter lists
@@ -1356,7 +1402,14 @@ document.addEventListener('alpine:init', () => {
                 if (ch.scenes) {
                     const idx = ch.scenes.findIndex(s => s.id === this.currentScene.id);
                     if (idx !== -1) ch.scenes[idx].wordCount = wordCount;
+                    if (scenePatch.summaryStale && idx !== -1) ch.scenes[idx].summaryStale = true;
                 }
+            }
+
+            if (scenePatch.summaryStale) {
+                try {
+                    if (this.currentScene) this.currentScene.summaryStale = true;
+                } catch (e) { }
             }
 
             this.isSaving = false;
