@@ -147,6 +147,11 @@ body {
     background: var(--success);
 }
 
+.status-dot.not-configured {
+    background: var(--accent);
+    animation: pulse 2s infinite;
+}
+
 @keyframes pulse {
 
     0%,

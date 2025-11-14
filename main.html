@@ -499,25 +499,163 @@
             </div>
         </div>
 
-        <!-- AI Settings Modal (placeholder) -->
-        <template x-if="showAISettings">
-            <div class="modal-overlay" @click.self="showAISettings = false">
-                <div class="modal">
-                    <h3>AI Provider Settings</h3>
-                    <p style="color:var(--text-secondary);">Configure AI providers and API keys here (placeholder).</p>
-                    <div style="margin-top:12px;">
-                        <label style="font-size:12px;color:var(--text-secondary);">Provider
-                            <input type="text" placeholder="e.g., local / remote"
-                                style="width:100%;margin-top:6px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);">
-                        </label>
-                    </div>
-                    <div class="modal-buttons" style="margin-top:18px;">
-                        <button class="btn btn-secondary" @click="showAISettings = false">Close</button>
-                        <button class="btn btn-primary" @click="showAISettings = false">Save</button>
+        <!-- AI Settings Panel -->
+        <div class="slide-panel-right" :class="{ 'open': showAISettings }" x-cloak
+            style="width:600px;border-left:1px solid rgba(74,158,255,0.08);box-shadow:-18px 0 40px rgba(0,0,0,0.55);">
+            <div class="slide-panel-header">
+                <h3 style="margin:0;">AI Configuration</h3>
+                <button class="btn btn-secondary" @click="showAISettings = false">Close</button>
+            </div>
+            <div class="slide-panel-body" style="overflow-y:auto;">
+                <!-- Quick Start Section -->
+                <div
+                    style="background:linear-gradient(135deg,rgba(74,158,255,0.08),rgba(74,158,255,0.02));border:1px solid rgba(74,158,255,0.2);border-radius:8px;padding:16px;margin-bottom:20px;">
+                    <h4 style="margin:0 0 8px 0;color:var(--accent);">🚀 Quick Start</h4>
+                    <p style="margin:0 0 12px 0;font-size:13px;color:var(--text-secondary);">New to AI writing? Start
+                        here! Choose a free API option or use a local model if you have one.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" style="font-size:13px;"
+                            @click="aiMode='api';aiProvider='openrouter';aiModel='google/gemini-2.0-flash-exp:free';showAIQuickStart=true">Use
+                            Free API (Recommended)</button>
+                        <button class="btn btn-secondary" style="font-size:13px;"
+                            @click="aiMode='local';showAIQuickStart=true">Use Local Model</button>
                     </div>
                 </div>
+
+                <!-- Mode Selection -->
+                <div style="margin-bottom:20px;">
+                    <label style="display:block;font-weight:600;margin-bottom:8px;color:var(--text-primary);">AI
+                        Mode</label>
+                    <div style="display:flex;gap:12px;">
+                        <button class="btn" :class="aiMode === 'api' ? 'btn-primary' : 'btn-secondary'"
+                            @click="aiMode = 'api'"
+                            style="flex:1;display:flex;flex-direction:column;align-items:center;padding:12px;">
+                            <div style="font-size:20px;margin-bottom:4px;">☁️</div>
+                            <div style="font-weight:600;">API (Cloud)</div>
+                            <div style="font-size:11px;opacity:0.7;">No setup required</div>
+                        </button>
+                        <button class="btn" :class="aiMode === 'local' ? 'btn-primary' : 'btn-secondary'"
+                            @click="aiMode = 'local'"
+                            style="flex:1;display:flex;flex-direction:column;align-items:center;padding:12px;">
+                            <div style="font-size:20px;margin-bottom:4px;">💻</div>
+                            <div style="font-weight:600;">Local Model</div>
+                            <div style="font-size:11px;opacity:0.7;">Privacy & offline</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- API Mode Settings -->
+                <div x-show="aiMode === 'api'" style="margin-bottom:20px;">
+                    <h4 style="margin:0 0 12px 0;">API Provider Settings</h4>
+
+                    <div style="margin-bottom:16px;">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">Provider</label>
+                        <select x-model="aiProvider"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                            <option value="openrouter">OpenRouter (Multi-model, has free options)</option>
+                            <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="openai">OpenAI (GPT)</option>
+                            <option value="google">Google AI (Gemini)</option>
+                            <option value="custom">Custom API Endpoint</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">API
+                            Key</label>
+                        <input type="password" x-model="aiApiKey" placeholder="Enter your API key"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0 0;">
+                            <template x-if="aiProvider === 'openrouter'">Get a free key at <a
+                                    href="https://openrouter.ai/keys" target="_blank"
+                                    style="color:var(--accent);">openrouter.ai/keys</a></template>
+                            <template x-if="aiProvider === 'anthropic'">Get your key at <a
+                                    href="https://console.anthropic.com/" target="_blank"
+                                    style="color:var(--accent);">console.anthropic.com</a></template>
+                            <template x-if="aiProvider === 'openai'">Get your key at <a
+                                    href="https://platform.openai.com/api-keys" target="_blank"
+                                    style="color:var(--accent);">platform.openai.com/api-keys</a></template>
+                            <template x-if="aiProvider === 'google'">Get your key at <a
+                                    href="https://makersuite.google.com/app/apikey" target="_blank"
+                                    style="color:var(--accent);">Google AI Studio</a></template>
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">Model</label>
+                        <input type="text" x-model="aiModel" :placeholder="aiProvider === 'openrouter' ? 'e.g., google/gemini-2.0-flash-exp:free' : 
+                            aiProvider === 'anthropic' ? 'e.g., claude-3-5-sonnet-20241022' : 
+                            aiProvider === 'openai' ? 'e.g., gpt-4o-mini' : 
+                            aiProvider === 'google' ? 'e.g., gemini-2.0-flash-exp' : 'Model name'"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                    </div>
+
+                    <div x-show="aiProvider === 'custom'" style="margin-bottom:16px;">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">Custom
+                            Endpoint URL</label>
+                        <input type="text" x-model="aiEndpoint"
+                            placeholder="https://api.example.com/v1/chat/completions"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                    </div>
+                </div>
+
+                <!-- Local Mode Settings -->
+                <div x-show="aiMode === 'local'" style="margin-bottom:20px;">
+                    <h4 style="margin:0 0 12px 0;">Local Model Settings</h4>
+
+                    <div
+                        style="background:rgba(74,158,255,0.05);border:1px solid rgba(74,158,255,0.2);border-radius:6px;padding:12px;margin-bottom:16px;">
+                        <p style="font-size:12px;color:var(--text-secondary);margin:0;">📁 Place your GGUF model
+                            files in the <code
+                                style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">/models</code>
+                            folder, then click "Scan for Models" below.</p>
+                    </div>
+
+                    <button class="btn btn-secondary" @click="scanLocalModels()" style="margin-bottom:16px;">🔍 Scan for
+                        Models</button>
+
+                    <div style="margin-bottom:16px;" x-show="availableLocalModels.length > 0">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">Select
+                            Model</label>
+                        <select x-model="aiModel"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                            <option value="">Choose a model...</option>
+                            <template x-for="model in availableLocalModels" :key="model">
+                                <option :value="model" x-text="model"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div x-show="availableLocalModels.length === 0"
+                        style="padding:12px;background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);border-radius:6px;">
+                        <p style="font-size:12px;color:var(--text-secondary);margin:0;">⚠️ No models found. Please add
+                            GGUF files to the /models folder.</p>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <label
+                            style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">Server
+                            URL</label>
+                        <input type="text" x-model="aiEndpoint" value="http://localhost:8080"
+                            placeholder="http://localhost:8080"
+                            style="width:100%;padding:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:6px;">
+                        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0 0;">The llama-server
+                            endpoint (usually localhost:8080)</p>
+                    </div>
+                </div>
+
+                <!-- Save Button -->
+                <div style="display:flex;gap:8px;padding-top:16px;border-top:1px solid var(--border);">
+                    <button class="btn btn-primary" @click="saveAISettings()">💾 Save & Test Connection</button>
+                    <button class="btn btn-secondary" @click="showAISettings = false">Cancel</button>
+                </div>
             </div>
-        </template>
+        </div>
 
         <!-- Prompts Slide Panel -->
         <div class="slide-panel-right prompts-panel" :class="{ 'open': showPromptsPanel }" x-cloak aria-hidden="true">

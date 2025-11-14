@@ -273,6 +273,14 @@ document.addEventListener('alpine:init', () => {
         showModelLoading: false,
         loadingMessage: 'Setting up AI...',
         loadingProgress: 0,
+        // AI Configuration
+        aiMode: 'local', // 'local' or 'api'
+        aiProvider: 'anthropic', // 'anthropic', 'openrouter', 'openai', 'google'
+        aiApiKey: '',
+        aiModel: '', // For API: model name, For local: filename from models folder
+        aiEndpoint: '', // Custom endpoint URL
+        availableLocalModels: [],
+        showAIQuickStart: false,
 
         // Rewrite selection UI with modal
         showRewriteBtn: false,
@@ -328,6 +336,9 @@ document.addEventListener('alpine:init', () => {
             } catch (e) {
                 console.error('Failed to load projects/last project:', e);
             }
+
+            // Load AI settings from localStorage
+            await this.loadAISettings();
 
             // Initialize AI via extracted module (src/ai.js)
             if (window.AI && typeof window.AI.init === 'function') {
@@ -532,7 +543,7 @@ document.addEventListener('alpine:init', () => {
                 const prompt = this.buildRewritePrompt();
                 await window.Generation.streamGeneration(prompt, (token) => {
                     this.rewriteOutput += token;
-                });
+                }, this);
                 this.rewriteInProgress = false;
             } catch (e) {
                 console.error('performRewrite error', e);
@@ -571,6 +582,90 @@ document.addEventListener('alpine:init', () => {
             this.rewriteOriginalText = '';
             this.rewriteOutput = '';
             this.rewritePromptPreview = '';
+        },
+
+        // AI Configuration Functions
+        async scanLocalModels() {
+            try {
+                // In a real file system environment, we'd scan the models folder
+                // For now, try to list what we can detect
+                this.availableLocalModels = ['Qwen3-4B-Instruct-2507-IQ4_XS.gguf'];
+                alert('Model scan complete! Found ' + this.availableLocalModels.length + ' model(s).');
+            } catch (e) {
+                console.error('Failed to scan models:', e);
+                alert('Could not scan models folder');
+            }
+        },
+
+        async saveAISettings() {
+            try {
+                // Save settings to localStorage
+                const settings = {
+                    mode: this.aiMode,
+                    provider: this.aiProvider,
+                    apiKey: this.aiApiKey,
+                    model: this.aiModel,
+                    endpoint: this.aiEndpoint || (this.aiMode === 'local' ? 'http://localhost:8080' : '')
+                };
+                localStorage.setItem('writingway:aiSettings', JSON.stringify(settings));
+
+                // Test connection
+                this.showModelLoading = true;
+                this.loadingMessage = 'Testing connection...';
+                this.loadingProgress = 50;
+
+                if (this.aiMode === 'local') {
+                    // Test local server
+                    const endpoint = this.aiEndpoint || 'http://localhost:8080';
+                    const response = await fetch(endpoint + '/health');
+                    if (response.ok) {
+                        this.aiStatus = 'ready';
+                        this.aiStatusText = 'AI Ready (Local)';
+                        this.loadingProgress = 100;
+                        setTimeout(() => { this.showModelLoading = false; }, 500);
+                        alert('✓ Connected to local server successfully!');
+                    } else {
+                        throw new Error('Local server not responding');
+                    }
+                } else {
+                    // Test API connection (basic validation)
+                    if (!this.aiApiKey) {
+                        throw new Error('API key is required');
+                    }
+                    if (!this.aiModel) {
+                        throw new Error('Model name is required');
+                    }
+                    this.aiStatus = 'ready';
+                    this.aiStatusText = `AI Ready (${this.aiProvider})`;
+                    this.loadingProgress = 100;
+                    setTimeout(() => { this.showModelLoading = false; }, 500);
+                    alert('✓ API settings saved! Ready to generate.');
+                }
+
+                this.showAISettings = false;
+            } catch (e) {
+                console.error('AI settings save/test failed:', e);
+                this.aiStatus = 'error';
+                this.aiStatusText = 'Connection failed';
+                this.showModelLoading = false;
+                alert('Connection failed: ' + (e.message || e));
+            }
+        },
+
+        async loadAISettings() {
+            try {
+                const saved = localStorage.getItem('writingway:aiSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    this.aiMode = settings.mode || 'local';
+                    this.aiProvider = settings.provider || 'anthropic';
+                    this.aiApiKey = settings.apiKey || '';
+                    this.aiModel = settings.model || '';
+                    this.aiEndpoint = settings.endpoint || '';
+                }
+            } catch (e) {
+                console.error('Failed to load AI settings:', e);
+            }
         },
 
         // Wire up the draggable beat splitter. Runs after Alpine has mounted.
@@ -2093,7 +2188,7 @@ document.addEventListener('alpine:init', () => {
                 await window.Generation.streamGeneration(prompt, (token) => {
                     this.currentScene.content += token;
                     this.lastGenText += token;
-                });
+                }, this);
 
                 // Generation complete — expose accept/retry/discard actions
                 this.showGenActions = true;

@@ -47,23 +47,58 @@
             }
         }
 
-        const prompt = `<|im_start|>system\n${systemPrompt}<|im_end|>\n<|im_start|>user\n${contextText}${proseTemplateText}\n\nBEAT TO EXPAND:\n${beat}\n\nWrite the next 2-3 paragraphs:<|im_end|>\n<|im_start|>assistant\n`;
-
-        // If we have compendiumText, insert it right after the user context and before the BEAT
+        let userContent = `${contextText}${proseTemplateText}`;
         if (compendiumText) {
-            const insertAt = prompt.indexOf('\n\nBEAT TO EXPAND:');
-            if (insertAt !== -1) {
-                const before = prompt.substring(0, insertAt);
-                const after = prompt.substring(insertAt);
-                return before + compendiumText + '\n' + after;
-            }
+            userContent += compendiumText;
         }
-        return prompt;
+        userContent += `\n\nBEAT TO EXPAND:\n${beat}\n\nWrite the next 2-3 paragraphs:`;
+
+        // Return object with both messages array (for APIs) and string format (for local)
+        const result = {
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userContent }
+            ],
+            // Legacy string format for local models with chat template
+            asString: function () {
+                return `<|im_start|>system\n${systemPrompt}<|im_end|>\n<|im_start|>user\n${userContent}<|im_end|>\n<|im_start|>assistant\n`;
+            }
+        };
+        return result;
     }
 
-    async function streamGeneration(prompt, onToken) {
-        // Performs the POST to the local llama-server completion endpoint and streams tokens.
-        const response = await fetch('http://localhost:8080/completion', {
+    async function streamGeneration(prompt, onToken, app) {
+        // Get AI settings from app if provided
+        const aiMode = app?.aiMode || 'local';
+        const aiProvider = app?.aiProvider || 'anthropic';
+        const aiApiKey = app?.aiApiKey || '';
+        const aiModel = app?.aiModel || '';
+        const aiEndpoint = app?.aiEndpoint || 'http://localhost:8080';
+
+        // Convert prompt to appropriate format
+        let promptStr = prompt;
+        let messages = null;
+
+        if (typeof prompt === 'object' && prompt.messages) {
+            messages = prompt.messages;
+            if (aiMode === 'local') {
+                // Use string format for local server
+                promptStr = prompt.asString();
+            }
+        }
+
+        if (aiMode === 'api') {
+            // API Mode - use configured provider with messages
+            return await streamGenerationAPI(messages || promptStr, onToken, aiProvider, aiApiKey, aiModel, aiEndpoint);
+        } else {
+            // Local Mode - use llama-server with string prompt
+            return await streamGenerationLocal(promptStr, onToken, aiEndpoint);
+        }
+    }
+
+    async function streamGenerationLocal(prompt, onToken, endpoint) {
+        // Local llama-server completion
+        const response = await fetch(endpoint + '/completion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -101,12 +136,136 @@
                             onToken(data.content);
                         }
                         if (data.stop) {
-                            // server indicated stop; finish early
                             return;
                         }
                     } catch (e) {
-                        // ignore parse errors for incomplete chunks
+                        // ignore parse errors
                     }
+                }
+            }
+        }
+    }
+
+    async function streamGenerationAPI(prompt, onToken, provider, apiKey, model, customEndpoint) {
+        // API Mode - construct request based on provider
+        let url, headers, body;
+
+        // Convert prompt to messages if needed
+        let messages;
+        if (Array.isArray(prompt)) {
+            messages = prompt;
+        } else if (typeof prompt === 'string') {
+            messages = [{ role: 'user', content: prompt }];
+        } else {
+            messages = [{ role: 'user', content: String(prompt) }];
+        }
+
+        if (provider === 'openrouter') {
+            url = 'https://openrouter.ai/api/v1/chat/completions';
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'HTTP-Referer': window.location.href,
+                'X-Title': 'Writingway'
+            };
+            body = {
+                model: model || 'google/gemini-2.0-flash-exp:free',
+                messages: messages,
+                stream: true
+            };
+        } else if (provider === 'anthropic') {
+            url = 'https://api.anthropic.com/v1/messages';
+            headers = {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            };
+            body = {
+                model: model || 'claude-3-5-sonnet-20241022',
+                messages: messages,
+                max_tokens: 1024,
+                stream: true
+            };
+        } else if (provider === 'openai') {
+            url = 'https://api.openai.com/v1/chat/completions';
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            };
+            body = {
+                model: model || 'gpt-4o-mini',
+                messages: messages,
+                stream: true
+            };
+        } else if (provider === 'google') {
+            // Google AI uses a different API format - extract text from messages
+            const text = messages.map(m => m.content).join('\n\n');
+            url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash-exp'}:streamGenerateContent?key=${apiKey}`;
+            headers = { 'Content-Type': 'application/json' };
+            body = {
+                contents: [{ parts: [{ text: text }] }]
+            };
+        } else if (provider === 'custom') {
+            url = customEndpoint;
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            };
+            body = {
+                model: model,
+                messages: messages,
+                stream: true
+            };
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status}: ${await response.text()}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                try {
+                    // Handle different streaming formats
+                    let jsonStr = line;
+                    if (line.startsWith('data: ')) jsonStr = line.slice(6);
+                    if (jsonStr === '[DONE]') return;
+
+                    const data = JSON.parse(jsonStr);
+
+                    // Extract token based on provider format
+                    let token = null;
+                    if (provider === 'openrouter' || provider === 'openai' || provider === 'custom') {
+                        token = data.choices?.[0]?.delta?.content;
+                    } else if (provider === 'anthropic') {
+                        if (data.type === 'content_block_delta') {
+                            token = data.delta?.text;
+                        }
+                    } else if (provider === 'google') {
+                        token = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    }
+
+                    if (token) onToken(token);
+                } catch (e) {
+                    // Ignore parse errors for incomplete chunks
                 }
             }
         }
