@@ -86,7 +86,9 @@
                 // In a real file system environment, we'd scan the models folder
                 // For now, try to list what we can detect
                 app.availableLocalModels = ['Qwen3-4B-Instruct-2507-IQ4_XS.gguf'];
-                alert('Model scan complete! Found ' + app.availableLocalModels.length + ' model(s).');
+                alert('Model scan complete! Found ' + app.availableLocalModels.length + ' model(s).\n\n' +
+                    '⚠️ Important: After selecting a model, you must restart Writingway using start.bat for the new model to load.\n\n' +
+                    'Tip: Make sure you downloaded the CUDA-enabled llama.cpp for GPU acceleration (loads in 2-3 seconds vs minutes on CPU).');
             } catch (e) {
                 console.error('Failed to scan models:', e);
                 alert('Could not scan models folder');
@@ -138,17 +140,53 @@
                 app.loadingProgress = 50;
 
                 if (app.aiMode === 'local') {
-                    // Test local server
+                    // Test local server with retry logic for model loading
                     const endpoint = app.aiEndpoint || 'http://localhost:8080';
-                    const response = await fetch(endpoint + '/health');
-                    if (response.ok) {
-                        app.aiStatus = 'ready';
-                        app.aiStatusText = 'AI Ready (Local)';
-                        app.loadingProgress = 100;
-                        setTimeout(() => { app.showModelLoading = false; }, 500);
-                        alert('✓ Connected to local server successfully!');
-                    } else {
-                        throw new Error('Local server not responding');
+                    const maxRetries = 60; // Try for up to ~3 minutes (60 * 3s) - large models can take time
+                    const retryDelay = 3000; // 3 seconds between retries
+                    let attempt = 0;
+                    let connected = false;
+
+                    app.loadingMessage = 'Connecting to local server... (model may be loading, this can take a while for large models)';
+
+                    while (attempt < maxRetries && !connected) {
+                        try {
+                            attempt++;
+                            const progress = 50 + (attempt / maxRetries) * 45; // 50% to 95%
+                            app.loadingProgress = Math.floor(progress);
+
+                            const elapsed = Math.floor((attempt * retryDelay) / 1000);
+                            app.loadingMessage = `Testing connection... (${elapsed}s elapsed, attempt ${attempt}/${maxRetries})`;
+
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout per request
+
+                            const response = await fetch(endpoint + '/health', {
+                                signal: controller.signal
+                            });
+                            clearTimeout(timeoutId);
+
+                            if (response.ok) {
+                                connected = true;
+                                app.aiStatus = 'ready';
+                                app.aiStatusText = 'AI Ready (Local)';
+                                app.loadingProgress = 100;
+                                app.loadingMessage = 'Connected!';
+                                setTimeout(() => { app.showModelLoading = false; }, 500);
+                                alert(`✓ Connected to local server successfully! (took ${elapsed}s)`);
+                                break;
+                            }
+                        } catch (err) {
+                            // If fetch fails or times out, wait and retry
+                            if (attempt < maxRetries) {
+                                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                            }
+                        }
+                    }
+
+                    if (!connected) {
+                        const elapsed = Math.floor((attempt * retryDelay) / 1000);
+                        throw new Error(`Could not connect to local server after ${elapsed}s. Make sure llama.cpp server is running and the model is loaded. Large models can take several minutes to load - you may need to wait and try again.`);
                     }
                 } else {
                     // Test API connection (basic validation)

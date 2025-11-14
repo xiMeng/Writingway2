@@ -807,7 +807,17 @@
                     <div x-show="availableLocalModels.length === 0"
                         style="padding:12px;background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);border-radius:6px;">
                         <p style="font-size:12px;color:var(--text-secondary);margin:0;">⚠️ No models found. Please add
-                            GGUF files to the /models folder.</p>
+                            GGUF files to the /models folder, then restart using start.bat</p>
+                    </div>
+
+                    <div x-show="availableLocalModels.length > 0"
+                        style="margin-top:12px;padding:10px;background:rgba(33,150,243,0.1);border:1px solid rgba(33,150,243,0.3);border-radius:6px;">
+                        <p style="font-size:11px;color:var(--text-secondary);margin:0;line-height:1.5;">
+                            💡 <strong>Note:</strong> Changing models requires restarting Writingway via <code
+                                style="background:rgba(0,0,0,0.2);padding:2px 4px;border-radius:3px;">start.bat</code>
+                            <br>• GPU-enabled llama.cpp loads models in ~3 seconds
+                            <br>• CPU-only version can take several minutes
+                        </p>
                     </div>
 
                     <div style="margin-top:16px;">

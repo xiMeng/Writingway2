@@ -364,6 +364,48 @@ document.addEventListener('alpine:init', () => {
 
         // Initialize
         async init() {
+            // Detect if opened via file:// protocol and warn user
+            if (window.location.protocol === 'file:') {
+                const useFileDirect = confirm(
+                    '⚠️ IMPORTANT: Data Storage Location\n\n' +
+                    'You opened Writingway directly (file://) instead of using start.bat\n\n' +
+                    'This means:\n' +
+                    '• Your projects are stored in a DIFFERENT database than start.bat\n' +
+                    '• Local AI server will NOT be running\n' +
+                    '• You cannot use local models without start.bat\n\n' +
+                    'RECOMMENDATION: Close this and run start.bat instead.\n\n' +
+                    'Click OK to continue anyway (different database)\n' +
+                    'Click Cancel to see instructions'
+                );
+
+                if (!useFileDirect) {
+                    document.body.innerHTML = `
+                        <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#1a1a1a;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif;padding:20px;">
+                            <div style="max-width:600px;background:#2a2a2a;border:2px solid #4a9eff;border-radius:12px;padding:32px;">
+                                <h1 style="margin:0 0 16px 0;color:#4a9eff;font-size:24px;">🚀 How to Start Writingway</h1>
+                                <ol style="line-height:1.8;padding-left:24px;margin:16px 0;">
+                                    <li>Close this browser tab</li>
+                                    <li>Navigate to your Writingway folder: <code style="background:#1a1a1a;padding:2px 6px;border-radius:4px;">E:\\Writingway2</code></li>
+                                    <li>Double-click <code style="background:#1a1a1a;padding:2px 6px;border-radius:4px;color:#4a9eff;font-weight:600;">start.bat</code></li>
+                                </ol>
+                                <div style="background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.3);border-radius:8px;padding:16px;margin-top:20px;">
+                                    <p style="margin:0;font-size:14px;"><strong>Why?</strong></p>
+                                    <p style="margin:8px 0 0 0;font-size:13px;line-height:1.6;">
+                                        start.bat ensures:<br>
+                                        • Unified project database (http://localhost:8000)<br>
+                                        • Local AI server running with GPU support<br>
+                                        • Fast model loading (2-3 seconds vs minutes)<br>
+                                        • Proper CORS and security settings
+                                    </p>
+                                </div>
+                                <button onclick="window.close()" style="margin-top:20px;padding:10px 20px;background:#4a9eff;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">Close This Tab</button>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+            }
+
             // Load projects and last project selection, but don't let DB failures block AI initialization
             try {
                 await this.loadProjects();
