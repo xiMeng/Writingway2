@@ -330,8 +330,7 @@ document.addEventListener('alpine:init', () => {
         rewriteBtnX: 0,
         rewriteBtnY: 0,
         selectedTextForRewrite: '',
-        rewriteSelectionStart: null,
-        rewriteSelectionEnd: null,
+        rewriteSelectionRange: null,
         showRewriteModal: false,
         rewriteOriginalText: '',
         rewriteOutput: '',
@@ -489,33 +488,45 @@ document.addEventListener('alpine:init', () => {
             // Selection change handler: show a floating "Rewrite" button when text is selected
             document.addEventListener('selectionchange', () => {
                 try {
-                    const ta = document.querySelector('.editor-textarea');
-                    if (!ta) {
+                    const editor = document.querySelector('.editor-textarea[contenteditable="true"]');
+                    if (!editor) {
                         this.showRewriteBtn = false;
                         return;
                     }
 
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
-                    if (typeof start !== 'number' || typeof end !== 'number' || end <= start) {
+                    const selection = window.getSelection();
+                    if (!selection || selection.rangeCount === 0) {
                         this.showRewriteBtn = false;
                         return;
                     }
 
-                    // Compute approximate coordinates for the end of the selection
-                    const coords = this._getTextareaSelectionCoords(ta, end);
-                    if (!coords) {
+                    const selectedText = selection.toString().trim();
+                    if (!selectedText) {
                         this.showRewriteBtn = false;
                         return;
                     }
 
-                    // Position the button a few pixels below the end of the selection
-                    // Use the right edge so the button anchors after the selected text
-                    const btnLeft = (coords.right != null) ? coords.right + 4 : coords.left;
+                    // Check if the selection is within the editor
+                    const range = selection.getRangeAt(0);
+                    if (!editor.contains(range.commonAncestorContainer)) {
+                        this.showRewriteBtn = false;
+                        return;
+                    }
+
+                    // Get the bounding rect of the selection
+                    const rect = range.getBoundingClientRect();
+                    if (!rect || rect.width === 0 || rect.height === 0) {
+                        this.showRewriteBtn = false;
+                        return;
+                    }
+
+                    // Position the button near the start of the selection for better visibility
+                    // Use left edge + small offset so it's close to where selection started
+                    const btnLeft = rect.left + 8;
                     // Keep inside viewport with small margin
                     this.rewriteBtnX = Math.min(window.innerWidth - 140, Math.max(8, btnLeft));
-                    this.rewriteBtnY = Math.max(8, coords.top + coords.height + 6);
-                    this.selectedTextForRewrite = ta.value.substring(start, end);
+                    this.rewriteBtnY = Math.max(8, rect.bottom + 6);
+                    this.selectedTextForRewrite = selectedText;
                     // Show only the floating button; modal behavior removed
                     this.showRewriteBtn = true;
                 } catch (e) {
@@ -576,13 +587,14 @@ document.addEventListener('alpine:init', () => {
         // Handle clicks on the floating Rewrite button: open modal with selected text
         handleRewriteButtonClick() {
             try {
-                const ta = document.querySelector('.editor-textarea');
-                if (ta) {
-                    this.rewriteSelectionStart = ta.selectionStart;
-                    this.rewriteSelectionEnd = ta.selectionEnd;
-                    this.rewriteOriginalText = ta.value.substring(this.rewriteSelectionStart, this.rewriteSelectionEnd);
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    // Store the range for later replacement
+                    this.rewriteSelectionRange = selection.getRangeAt(0).cloneRange();
+                    this.rewriteOriginalText = selection.toString();
                 } else {
                     this.rewriteOriginalText = this.selectedTextForRewrite || '';
+                    this.rewriteSelectionRange = null;
                 }
                 this.rewriteOutput = '';
                 this.rewritePromptPreview = '';
@@ -640,16 +652,26 @@ document.addEventListener('alpine:init', () => {
         async acceptRewrite() {
             try {
                 if (!this.currentScene || !this.rewriteOutput) return;
-                const start = this.rewriteSelectionStart;
-                const end = this.rewriteSelectionEnd;
-                if (typeof start !== 'number' || typeof end !== 'number') return;
-                const before = this.currentScene.content.substring(0, start);
-                const after = this.currentScene.content.substring(end);
-                this.currentScene.content = before + this.rewriteOutput + after;
+
+                // If we have a stored range, use it to replace the text in the contenteditable
+                if (this.rewriteSelectionRange) {
+                    const editor = document.querySelector('.editor-textarea[contenteditable="true"]');
+                    if (editor) {
+                        // Delete the selected content and insert the new text
+                        this.rewriteSelectionRange.deleteContents();
+                        const textNode = document.createTextNode(this.rewriteOutput);
+                        this.rewriteSelectionRange.insertNode(textNode);
+
+                        // Trigger the input event to save the change
+                        const event = new Event('input', { bubbles: true });
+                        editor.dispatchEvent(event);
+                    }
+                }
+
                 this.showRewriteModal = false;
                 this.rewriteOriginalText = '';
                 this.rewriteOutput = '';
-                await this.saveScene();
+                this.rewriteSelectionRange = null;
             } catch (e) {
                 console.error('acceptRewrite error', e);
             }
