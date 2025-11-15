@@ -39,6 +39,7 @@ Unlike its predecessor, this new version is built with **JavaScript + HTML**, ma
   - autosave  
 
 - 🧠 **Workshop Chat**
+
     Design prompts for and chat with AI about
   - plot generators  
   - character builders  
@@ -167,7 +168,8 @@ Ensures the AI responds consistently and in the desired format.
 
 ### 🔁 AI Integration
 Supports:
-- **local LLMs** (LM Studio / Ollama / Jan), also has llama.cpp server integration, so you can just drop a model in the /models folder
+- **local LLMs** (LM Studio / Ollama / Jan) 
+    - Also has llama.cpp server integration, so you can just drop a model in the /models folder
 - **OpenAI / OpenRouter**  
 
 Features:
