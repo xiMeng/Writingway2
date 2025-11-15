@@ -52,6 +52,11 @@
                 wordCount
             };
 
+            // Track mentioned compendium entries from beat field
+            if (app.beatCompendiumMap && Object.keys(app.beatCompendiumMap).length > 0) {
+                scenePatch.mentionedEntries = Object.values(app.beatCompendiumMap);
+            }
+
             // If the content changed and there was an existing summary, mark the summary stale
             try {
                 const contentChanged = prevContent && (prevContent.text || '') !== (scene.content || '');

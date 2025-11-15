@@ -112,7 +112,8 @@
                     title: app.currentCompEntry.title || '',
                     body: app.currentCompEntry.body || '',
                     tags: JSON.parse(JSON.stringify(app.currentCompEntry.tags || [])),
-                    imageUrl: app.currentCompEntry.imageUrl || null
+                    imageUrl: app.currentCompEntry.imageUrl || null,
+                    alwaysInContext: app.currentCompEntry.alwaysInContext || false
                 };
                 await window.Compendium.updateEntry(app.currentCompEntry.id, updates);
                 await this.loadCompendiumCategory(app, app.currentCompCategory);

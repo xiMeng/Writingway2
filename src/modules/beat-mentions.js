@@ -245,29 +245,47 @@
 
         /**
          * Parse beatInput for @[Title] mentions and return resolved compendium rows
+         * Also includes entries marked with alwaysInContext flag
          * @param {Object} app - Alpine app instance
          * @param {string} beatText - Beat text to parse
          * @returns {Promise<Array>} Array of compendium entries
          */
         async resolveCompendiumEntriesFromBeat(app, beatText) {
             try {
-                if (!beatText) return [];
                 const ids = new Set();
 
-                // Parse @[Title] mentions and look up IDs from our mapping
-                const reMention = /@\[([^\]]+)\]/g;
-                let m;
-                while ((m = reMention.exec(beatText)) !== null) {
-                    const title = m[1];
-                    if (app.beatCompendiumMap[title]) {
-                        ids.add(app.beatCompendiumMap[title]);
+                // First, add all entries marked as "always in context" for the current project
+                if (app.currentProject && app.currentProject.id) {
+                    try {
+                        const alwaysInContext = await db.compendium
+                            .where('projectId')
+                            .equals(app.currentProject.id)
+                            .filter(e => e.alwaysInContext === true)
+                            .toArray();
+                        for (const entry of alwaysInContext) {
+                            ids.add(entry.id);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch alwaysInContext entries:', e);
                     }
                 }
 
-                // Also support legacy formats for backward compatibility
-                const reLegacy = /\[\[comp:([^\]]+)\]\]/g;
-                while ((m = reLegacy.exec(beatText)) !== null) {
-                    if (m[1]) ids.add(m[1]);
+                // Parse @[Title] mentions and look up IDs from our mapping
+                if (beatText) {
+                    const reMention = /@\[([^\]]+)\]/g;
+                    let m;
+                    while ((m = reMention.exec(beatText)) !== null) {
+                        const title = m[1];
+                        if (app.beatCompendiumMap[title]) {
+                            ids.add(app.beatCompendiumMap[title]);
+                        }
+                    }
+
+                    // Also support legacy formats for backward compatibility
+                    const reLegacy = /\[\[comp:([^\]]+)\]\]/g;
+                    while ((m = reLegacy.exec(beatText)) !== null) {
+                        if (m[1]) ids.add(m[1]);
+                    }
                 }
 
                 const out = [];
