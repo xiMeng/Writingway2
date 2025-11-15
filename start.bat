@@ -94,18 +94,28 @@ echo.
 
 REM Start Python HTTP server and open browser
 echo [*] Starting web server on port 8000...
-echo [*] Opening Writingway in your browser...
+echo [*] Opening Writingway in 3 seconds...
 echo.
 echo ================================
-echo   Writingway is running!
+echo   Writingway is starting!
 echo ================================
+echo.
+echo PLEASE NOTE:
+echo  * The browser window will appear in ~3 seconds
+echo  * The page will show a loading screen while AI initializes
+echo  * First startup may take 2-3 minutes for AI to load
+echo  * Keep this window open while using Writingway
 echo.
 echo Web UI: http://localhost:8000/main.html
 echo AI API: http://localhost:8080
 echo.
-echo Keep this window open while using Writingway.
-echo Close this window to stop both servers.
+
+REM Wait 3 seconds before opening browser (gives servers time to stabilize)
+timeout /t 3 /nobreak >nul
+
+echo [*] Opening browser now...
 echo.
+echo Close this window to stop both servers.
 echo Press Ctrl+C to stop manually.
 echo ================================
 echo.

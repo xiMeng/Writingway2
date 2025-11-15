@@ -250,6 +250,10 @@ document.addEventListener('alpine:init', () => {
         ttsSpeed: 1.0, // Speech rate (0.5 - 2.0)
         availableTTSVoices: [], // Populated on init
 
+        // App initialization state
+        appReady: false,
+        initProgress: 0,
+
         currentScene: null,
         chapters: [],
         scenes: [], // flattened scenes list for quick access
@@ -404,8 +408,44 @@ document.addEventListener('alpine:init', () => {
             return total;
         },
 
+        // Helper to update loading screen
+        updateLoadingScreen(progress, status, tip) {
+            try {
+                const screen = document.getElementById('loadingScreen');
+                const bar = document.getElementById('loadingBar');
+                const statusEl = document.getElementById('loadingStatus');
+                const tipEl = document.getElementById('loadingTip');
+
+                if (bar) bar.style.width = `${progress}%`;
+                if (statusEl && status) statusEl.textContent = status;
+                if (tipEl && tip) tipEl.textContent = tip;
+
+                this.initProgress = progress;
+            } catch (e) {
+                console.warn('Could not update loading screen:', e);
+            }
+        },
+
+        // Hide loading screen when ready
+        hideLoadingScreen() {
+            try {
+                const screen = document.getElementById('loadingScreen');
+                if (screen) {
+                    screen.style.opacity = '0';
+                    setTimeout(() => {
+                        screen.style.display = 'none';
+                    }, 500);
+                }
+                this.appReady = true;
+            } catch (e) {
+                console.warn('Could not hide loading screen:', e);
+            }
+        },
+
         // Initialize
         async init() {
+            this.updateLoadingScreen(10, 'Initializing...', 'Checking startup method...');
+
             // Detect if opened via file:// protocol and warn user
             if (window.location.protocol === 'file:') {
                 const useFileDirect = confirm(
@@ -448,6 +488,8 @@ document.addEventListener('alpine:init', () => {
                 }
             }
 
+            this.updateLoadingScreen(20, 'Loading projects...', 'Accessing local database...');
+
             // Load projects and last project selection, but don't let DB failures block AI initialization
             try {
                 await this.loadProjects();
@@ -464,8 +506,12 @@ document.addEventListener('alpine:init', () => {
                 console.error('Failed to load projects/last project:', e);
             }
 
+            this.updateLoadingScreen(40, 'Loading AI settings...', 'Configuring generation parameters...');
+
             // Load AI settings from localStorage
             await this.loadAISettings();
+
+            this.updateLoadingScreen(50, 'Initializing AI...', 'This may take 2-3 minutes on first run...');
 
             // Initialize AI via extracted module (src/ai.js)
             if (window.AI && typeof window.AI.init === 'function') {
@@ -537,6 +583,8 @@ document.addEventListener('alpine:init', () => {
             this.$watch('temperature', () => this.saveGenerationParams());
             this.$watch('maxTokens', () => this.saveGenerationParams());
 
+            this.updateLoadingScreen(70, 'Loading features...', 'Setting up text-to-speech and updates...');
+
             // Check for updates on startup (silent mode)
             if (window.UpdateChecker) {
                 setTimeout(() => window.UpdateChecker.checkAndNotify(this, true), 2000);
@@ -557,6 +605,8 @@ document.addEventListener('alpine:init', () => {
                     if (savedSpeed) this.ttsSpeed = parseFloat(savedSpeed);
                 }, 500);
             }
+
+            this.updateLoadingScreen(85, 'Almost ready...', 'Finalizing setup...');
 
             // Selection change handler: show a floating "Rewrite" button when text is selected
             document.addEventListener('selectionchange', () => {
@@ -609,6 +659,12 @@ document.addEventListener('alpine:init', () => {
             });
             // Mount the beat splitter which allows resizing the beat textarea
             try { this.mountBeatSplitter(); } catch (err) { /* ignore */ }
+
+            // Final step: hide loading screen
+            this.updateLoadingScreen(100, 'Ready!', 'Welcome to Writingway');
+            setTimeout(() => {
+                this.hideLoadingScreen();
+            }, 300);
         },
 
         // Compute selection coordinates inside a textarea by mirroring styles into a hidden div.
