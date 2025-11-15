@@ -151,6 +151,10 @@
             await app.loadPrompts();
             // restore prose prompt selection for this project
             try { await this.loadSelectedProsePrompt(app); } catch (e) { /* ignore */ }
+            // Load workshop sessions for this project
+            try { await app.loadWorkshopSessions(); } catch (e) { console.error('Failed to load workshop sessions:', e); }
+            // Load selected workshop prompt
+            try { await app.loadSelectedWorkshopPrompt(); } catch (e) { /* ignore */ }
             if (app.scenes.length > 0) {
                 await app.loadScene(app.scenes[0].id);
             } else {

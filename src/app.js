@@ -150,6 +150,13 @@ db.version(5).stores({
     // noop: index addition handled by Dexie
 });
 
+// Add workshopSessions table for Workshop Chat feature
+db.version(6).stores({
+    workshopSessions: 'id, projectId, name, createdAt, updatedAt'
+}).upgrade(async tx => {
+    // noop: new table will be created automatically
+});
+
 // Expose the global Dexie instance for debugging and console usage
 try { window.db = window.db || db; } catch (e) { /* ignore in non-browser env */ }
 
@@ -207,6 +214,31 @@ document.addEventListener('alpine:init', () => {
         showAISettings: false,
         showPromptsPanel: false,
         showCodexPanel: false,
+
+        // Workshop Chat state
+        showWorkshopChat: false,
+        workshopSessions: [],
+        currentWorkshopSessionIndex: 0,
+        // Ensure at least one session exists when opening
+        get hasWorkshopSessions() {
+            return this.workshopSessions && this.workshopSessions.length > 0;
+        },
+        workshopInput: '',
+        workshopIsGenerating: false,
+        selectedWorkshopPromptId: null,
+        workshopFidelityMode: 'balanced',
+        showWorkshopContext: false,
+        selectedWorkshopContext: [],
+        // Workshop mention autocomplete state
+        showWorkshopQuickSearch: false,
+        workshopQuickSearchMatches: [],
+        workshopQuickSearchSelectedIndex: 0,
+        showWorkshopSceneSearch: false,
+        workshopSceneSearchMatches: [],
+        workshopSceneSearchSelectedIndex: 0,
+        workshopCompendiumMap: {},
+        workshopSceneMap: {},
+
         currentScene: null,
         chapters: [],
         scenes: [], // flattened scenes list for quick access
@@ -484,6 +516,15 @@ document.addEventListener('alpine:init', () => {
                     this._lastMouseUpTime = Date.now();
                 } catch (e) { /* ignore */ }
             }, true);
+
+            // Watch AI settings and auto-save when they change
+            this.$watch('aiMode', () => this.saveGenerationParams());
+            this.$watch('aiProvider', () => this.saveGenerationParams());
+            this.$watch('aiModel', () => this.saveGenerationParams());
+            this.$watch('aiApiKey', () => this.saveGenerationParams());
+            this.$watch('aiEndpoint', () => this.saveGenerationParams());
+            this.$watch('temperature', () => this.saveGenerationParams());
+            this.$watch('maxTokens', () => this.saveGenerationParams());
 
             // Selection change handler: show a floating "Rewrite" button when text is selected
             document.addEventListener('selectionchange', () => {
@@ -1037,6 +1078,90 @@ document.addEventListener('alpine:init', () => {
         },
         async moveCompendiumEntryToCategory(id, newCategory) {
             await window.CompendiumManager.moveCompendiumEntryToCategory(this, id, newCategory);
+        },
+
+        // Workshop Chat methods
+        async loadWorkshopSessions() {
+            if (!this.currentProject) return;
+            try {
+                const sessions = await db.workshopSessions
+                    .where('projectId')
+                    .equals(this.currentProject.id)
+                    .toArray();
+
+                if (sessions.length > 0) {
+                    this.workshopSessions = sessions;
+                } else {
+                    // Create a default session
+                    this.workshopSessions = [window.workshopChat.createNewSession(this)];
+                    await this.saveWorkshopSessions();
+                }
+            } catch (error) {
+                console.error('Failed to load workshop sessions:', error);
+                this.workshopSessions = [window.workshopChat.createNewSession()];
+            }
+        },
+
+        async saveWorkshopSessions() {
+            if (!this.currentProject || !this.workshopSessions) return;
+            try {
+                // Clear existing sessions for this project
+                await db.workshopSessions
+                    .where('projectId')
+                    .equals(this.currentProject.id)
+                    .delete();
+
+                // Save all sessions
+                for (const session of this.workshopSessions) {
+                    await db.workshopSessions.add({
+                        ...session,
+                        projectId: this.currentProject.id,
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to save workshop sessions:', error);
+            }
+        },
+
+        createWorkshopSession() {
+            const newSession = window.workshopChat.createNewSession(this);
+            this.workshopSessions.push(newSession);
+            this.currentWorkshopSessionIndex = this.workshopSessions.length - 1;
+            this.saveWorkshopSessions();
+        },
+
+        async deleteWorkshopSession(index) {
+            if (this.workshopSessions.length <= 1) {
+                alert('You must have at least one chat session.');
+                return;
+            }
+            if (confirm('Delete this chat session? This cannot be undone.')) {
+                this.workshopSessions.splice(index, 1);
+                if (this.currentWorkshopSessionIndex >= this.workshopSessions.length) {
+                    this.currentWorkshopSessionIndex = this.workshopSessions.length - 1;
+                }
+                await this.saveWorkshopSessions();
+            }
+        },
+
+        async loadSelectedWorkshopPrompt() {
+            if (!this.currentProject) return;
+            const key = `workshopPrompt_${this.currentProject.id}`;
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                this.selectedWorkshopPromptId = saved;
+            }
+        },
+
+        saveSelectedWorkshopPrompt() {
+            if (!this.currentProject) return;
+            const key = `workshopPrompt_${this.currentProject.id}`;
+            if (this.selectedWorkshopPromptId) {
+                localStorage.setItem(key, this.selectedWorkshopPromptId);
+            } else {
+                localStorage.removeItem(key);
+            }
         },
 
         async createPrompt(category) {
