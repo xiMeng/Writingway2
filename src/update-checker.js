@@ -1,36 +1,45 @@
 // Update Checker Module
-// Checks for new versions on GitHub and prompts user to update
+// Checks for new versions on GitHub based on latest commit date
 (function () {
     const UpdateChecker = {
-        // Current version - update this with each release
-        currentVersion: '1.0.0',
+        // Build timestamp - set automatically when this file is saved
+        // This represents when your local copy was created
+        buildDate: new Date('__BUILD_DATE__').getTime(), // Will be replaced on build
 
         // GitHub repository info
         repoOwner: 'aomukai',
         repoName: 'Writingway2',
+        branch: 'main',
 
         /**
-         * Check for updates from GitHub releases
+         * Check for updates by comparing commit dates
          * @returns {Promise<Object|null>} Update info or null if no update
          */
         async checkForUpdates() {
             try {
-                const response = await fetch(`https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`);
+                // Fetch latest commit from the main branch
+                const response = await fetch(`https://api.github.com/repos/${this.repoOwner}/${this.repoName}/commits/${this.branch}`);
                 if (!response.ok) {
                     console.log('Could not check for updates:', response.status);
                     return null;
                 }
 
-                const release = await response.json();
-                const latestVersion = release.tag_name.replace(/^v/, ''); // Remove 'v' prefix if present
+                const commit = await response.json();
+                const commitDate = new Date(commit.commit.committer.date).getTime();
 
-                if (this.isNewerVersion(latestVersion, this.currentVersion)) {
+                // If buildDate is invalid (still has placeholder), use a very old date
+                const localBuildDate = isNaN(this.buildDate) ? 0 : this.buildDate;
+
+                if (commitDate > localBuildDate) {
+                    const commitShort = commit.sha.substring(0, 7);
                     return {
-                        version: latestVersion,
-                        url: release.html_url,
-                        downloadUrl: release.zipball_url,
-                        notes: release.body || 'No release notes available.',
-                        publishedAt: new Date(release.published_at).toLocaleDateString()
+                        version: commitShort,
+                        commitDate: new Date(commitDate).toLocaleDateString(),
+                        message: commit.commit.message.split('\n')[0], // First line only
+                        url: commit.html_url,
+                        downloadUrl: `https://github.com/${this.repoOwner}/${this.repoName}/archive/refs/heads/${this.branch}.zip`,
+                        notes: `Latest commit: ${commit.commit.message}`,
+                        publishedAt: new Date(commitDate).toLocaleDateString()
                     };
                 }
 
@@ -39,26 +48,6 @@
                 console.error('Error checking for updates:', error);
                 return null;
             }
-        },
-
-        /**
-         * Compare version numbers (semantic versioning)
-         * @param {string} newVer - New version (e.g., "1.2.3")
-         * @param {string} currentVer - Current version (e.g., "1.2.0")
-         * @returns {boolean} True if newVer is newer
-         */
-        isNewerVersion(newVer, currentVer) {
-            const newParts = newVer.split('.').map(Number);
-            const currentParts = currentVer.split('.').map(Number);
-
-            for (let i = 0; i < 3; i++) {
-                const newPart = newParts[i] || 0;
-                const currentPart = currentParts[i] || 0;
-                if (newPart > currentPart) return true;
-                if (newPart < currentPart) return false;
-            }
-
-            return false; // Versions are equal
         },
 
         /**

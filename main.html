@@ -1236,19 +1236,20 @@
                         <div
                             style="background:linear-gradient(135deg,rgba(74,158,255,0.1),rgba(74,158,255,0.05));border:1px solid rgba(74,158,255,0.3);border-radius:8px;padding:16px;margin-bottom:16px;">
                             <div style="font-size:18px;font-weight:600;margin-bottom:8px;color:var(--accent);">
-                                Version <span x-text="updateAvailable.version"></span> is now available!
+                                New update available!
                             </div>
                             <div style="font-size:13px;color:var(--text-secondary);">
-                                Released on <span x-text="updateAvailable.publishedAt"></span>
+                                Latest commit (<span x-text="updateAvailable.version"></span>) from <span
+                                    x-text="updateAvailable.commitDate"></span>
                             </div>
                         </div>
 
                         <div style="margin-bottom:16px;">
-                            <div style="font-weight:600;margin-bottom:8px;color:var(--text-primary);">What's New:</div>
-                            <div
-                                style="background:var(--bg-tertiary);padding:12px;border-radius:6px;max-height:200px;overflow-y:auto;">
-                                <pre style="margin:0;white-space:pre-wrap;font-size:13px;line-height:1.6;color:var(--text-secondary);"
-                                    x-text="updateAvailable.notes"></pre>
+                            <div style="font-weight:600;margin-bottom:8px;color:var(--text-primary);">Latest Change:
+                            </div>
+                            <div style="background:var(--bg-tertiary);padding:12px;border-radius:6px;">
+                                <div style="margin:0;font-size:13px;line-height:1.6;color:var(--text-secondary);"
+                                    x-text="updateAvailable.message"></div>
                             </div>
                         </div>
 
