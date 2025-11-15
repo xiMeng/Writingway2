@@ -2,9 +2,9 @@
 // Checks for new versions on GitHub based on latest commit date
 (function () {
     const UpdateChecker = {
-        // Build timestamp - set automatically when this file is saved
-        // This represents when your local copy was created
-        buildDate: new Date('__BUILD_DATE__').getTime(), // Will be replaced on build
+        // Build timestamp - update this when you push a new version
+        // This represents when this version was created
+        buildDate: new Date('2025-11-16T00:00:00Z').getTime(), // Update before each push
 
         // GitHub repository info
         repoOwner: 'aomukai',
