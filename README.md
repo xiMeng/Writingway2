@@ -38,13 +38,14 @@ Unlike its predecessor, this new version is built with **JavaScript + HTML**, ma
   - drag‑and‑drop reordering  
   - autosave  
 
-- 🧠 **Creative Workshops**
+- 🧠 **Workshop Chat**
+    Design prompts for and chat with AI about
   - plot generators  
   - character builders  
   - setting ideas  
   - prose improvement  
 
-- 🧰 **Smart Prompt Builder (Codex)**
+- 🧰 **Smart Prompt Builder (Scene Beats)**
   - builds structured prompts automatically  
   - integrates compendium + scene metadata  
   - ensures consistent AI responses  
@@ -138,13 +139,12 @@ No online accounts required.
 ### 📚 Compendium
 - Characters, places, species, lore, items  
 - Tags and categories  
-- Integrated into prompt builder  
-- AI assistance for automatic entry creation  
+- Integrated into prompt builder   
 
 ---
 
-### 🧠 Workshops
-Tools designed for inspiration and writer‑support:
+### 🧠 Workshop Chat
+Chat with your AI about:
 - plot ideas  
 - character outlines  
 - worldbuilding prompts  
@@ -167,7 +167,7 @@ Ensures the AI responds consistently and in the desired format.
 
 ### 🔁 AI Integration
 Supports:
-- **local LLMs** (LM Studio / Ollama / Jan)  
+- **local LLMs** (LM Studio / Ollama / Jan), also has llama.cpp server integration, so you can just drop a model in the /models folder
 - **OpenAI / OpenRouter**  
 
 Features:
@@ -288,3 +288,5 @@ Writingway was built to help **writers write** — not struggle with tools.
 If this app helps you bring your stories to life, it has succeeded.
 
 **Happy writing! ✨**
+
+(And thanks for writing this readme, GPT-5.1)
