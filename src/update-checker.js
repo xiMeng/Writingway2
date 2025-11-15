@@ -4,11 +4,11 @@
     const UpdateChecker = {
         // Current version - update this with each release
         currentVersion: '1.0.0',
-        
+
         // GitHub repository info
         repoOwner: 'aomukai',
         repoName: 'Writingway2',
-        
+
         /**
          * Check for updates from GitHub releases
          * @returns {Promise<Object|null>} Update info or null if no update
@@ -20,10 +20,10 @@
                     console.log('Could not check for updates:', response.status);
                     return null;
                 }
-                
+
                 const release = await response.json();
                 const latestVersion = release.tag_name.replace(/^v/, ''); // Remove 'v' prefix if present
-                
+
                 if (this.isNewerVersion(latestVersion, this.currentVersion)) {
                     return {
                         version: latestVersion,
@@ -33,14 +33,14 @@
                         publishedAt: new Date(release.published_at).toLocaleDateString()
                     };
                 }
-                
+
                 return null; // No update available
             } catch (error) {
                 console.error('Error checking for updates:', error);
                 return null;
             }
         },
-        
+
         /**
          * Compare version numbers (semantic versioning)
          * @param {string} newVer - New version (e.g., "1.2.3")
@@ -50,17 +50,17 @@
         isNewerVersion(newVer, currentVer) {
             const newParts = newVer.split('.').map(Number);
             const currentParts = currentVer.split('.').map(Number);
-            
+
             for (let i = 0; i < 3; i++) {
                 const newPart = newParts[i] || 0;
                 const currentPart = currentParts[i] || 0;
                 if (newPart > currentPart) return true;
                 if (newPart < currentPart) return false;
             }
-            
+
             return false; // Versions are equal
         },
-        
+
         /**
          * Show update notification to user
          * @param {Object} app - Alpine app instance
@@ -68,11 +68,11 @@
          */
         showUpdateDialog(app, updateInfo) {
             if (!updateInfo) return;
-            
+
             app.updateAvailable = updateInfo;
             app.showUpdateDialog = true;
         },
-        
+
         /**
          * Check for updates and notify user if available
          * @param {Object} app - Alpine app instance
@@ -82,7 +82,7 @@
             try {
                 app.checkingForUpdates = true;
                 const updateInfo = await this.checkForUpdates();
-                
+
                 if (updateInfo) {
                     this.showUpdateDialog(app, updateInfo);
                 } else if (!silent) {
@@ -97,7 +97,7 @@
             }
         }
     };
-    
+
     // Export to window
     window.UpdateChecker = UpdateChecker;
 })();
