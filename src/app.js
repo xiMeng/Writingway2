@@ -150,8 +150,30 @@ db.version(5).stores({
     // noop: index addition handled by Dexie
 });
 
-// Add workshopSessions table for Workshop Chat feature
+// Add prompt history table (v6)
 db.version(6).stores({
+    projects: 'id, name, created, modified',
+    chapters: 'id, projectId, title, order, created, modified',
+    scenes: 'id, projectId, chapterId, title, order, created, modified',
+    content: 'sceneId, text, wordCount',
+    prompts: 'id, projectId, category, title, created, modified',
+    codex: 'id, projectId, title, created, modified',
+    compendium: 'id, [projectId+category], projectId, category, title, modified, tags',
+    promptHistory: 'id, projectId, sceneId, timestamp, beat, prompt'
+}).upgrade(async tx => {
+    // noop: new table for prompt history
+});
+
+// Add workshopSessions table for Workshop Chat feature (v7)
+db.version(7).stores({
+    projects: 'id, name, created, modified',
+    chapters: 'id, projectId, title, order, created, modified',
+    scenes: 'id, projectId, chapterId, title, order, created, modified',
+    content: 'sceneId, text, wordCount',
+    prompts: 'id, projectId, category, title, created, modified',
+    codex: 'id, projectId, title, created, modified',
+    compendium: 'id, [projectId+category], projectId, category, title, modified, tags',
+    promptHistory: 'id, projectId, sceneId, timestamp, beat, prompt',
     workshopSessions: 'id, projectId, name, createdAt, updatedAt'
 }).upgrade(async tx => {
     // noop: new table will be created automatically
@@ -213,7 +235,10 @@ document.addEventListener('alpine:init', () => {
         renameProjectName: '',
         showAISettings: false,
         showPromptsPanel: false,
+        showPromptHistory: false,
+        promptHistoryList: [],
         showCodexPanel: false,
+        showSpecialChars: false,
 
         // Projects carousel view
         showProjectsView: false,
@@ -2186,7 +2211,65 @@ document.addEventListener('alpine:init', () => {
             return plainText.trim().split(/\s+/).filter(word => word.length > 0).length;
         },
 
+        // Insert special character at cursor position in editor
+        insertSpecialChar(char) {
+            if (!this.currentScene) return;
+            const textarea = document.querySelector('.editor-textarea');
+            if (!textarea) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = this.currentScene.content || '';
+
+            this.currentScene.content = text.substring(0, start) + char + text.substring(end);
+            this.showSpecialChars = false;
+
+            this.$nextTick(() => {
+                textarea.focus();
+                const newPos = start + char.length;
+                textarea.setSelectionRange(newPos, newPos);
+            });
+        },
+
+        // Handle auto-replacement of -- to em dash
+        handleAutoReplace(event) {
+            if (!this.currentScene || !this.currentScene.content) return;
+
+            const textarea = event.target;
+            const cursorPos = textarea.selectionStart;
+            const text = this.currentScene.content;
+
+            // Check if we just typed a second hyphen
+            if (text.substring(cursorPos - 2, cursorPos) === '--') {
+                // Replace -- with em dash
+                this.currentScene.content = text.substring(0, cursorPos - 2) + '—' + text.substring(cursorPos);
+
+                this.$nextTick(() => {
+                    const newPos = cursorPos - 1; // Move cursor after the em dash
+                    textarea.setSelectionRange(newPos, newPos);
+                });
+            }
+        },
+
         // AI Generation (delegates to src/generation.js)
+        async loadPromptHistory() {
+            if (!this.currentProject) {
+                this.promptHistoryList = [];
+                return;
+            }
+            try {
+                const history = await db.promptHistory
+                    .where('projectId')
+                    .equals(this.currentProject.id)
+                    .reverse()
+                    .sortBy('timestamp');
+                this.promptHistoryList = history;
+            } catch (e) {
+                console.error('Failed to load prompt history:', e);
+                this.promptHistoryList = [];
+            }
+        },
+
         async generateFromBeat() {
             if (!this.beatInput || this.aiStatus !== 'ready') return;
 
@@ -2218,6 +2301,20 @@ document.addEventListener('alpine:init', () => {
                     try { console.debug('[generate] builtPrompt preview:', String(prompt).slice(0, 600).replace(/\n/g, '\\n')); } catch (e) { }
                 } else {
                     throw new Error('Generation module not available');
+                }
+
+                // Save prompt to history
+                try {
+                    await db.promptHistory.add({
+                        id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 9),
+                        projectId: this.currentProject?.id,
+                        sceneId: this.currentScene?.id,
+                        timestamp: new Date(),
+                        beat: this.beatInput,
+                        prompt: typeof prompt === 'object' && prompt.asString ? prompt.asString() : String(prompt)
+                    });
+                } catch (e) {
+                    console.warn('Failed to save prompt history:', e);
                 }
 
                 // remember where generated text will start

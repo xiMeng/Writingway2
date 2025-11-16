@@ -497,10 +497,10 @@
                         <template x-if="currentScene">
                             <div style="position:relative;height:100%;display:flex;flex-direction:column;">
                                 <!-- Edit Mode: Textarea -->
-                                <textarea x-show="!showMarkdownPreview" class="editor-textarea" @input="onEditorChange"
-                                    @paste="handlePaste" x-model="currentScene.content"
-                                    style="outline:none;direction:ltr;resize:none;" dir="ltr"
-                                    placeholder="Start writing your scene here..."></textarea>
+                                <textarea x-show="!showMarkdownPreview" class="editor-textarea"
+                                    @input="onEditorChange($event); handleAutoReplace($event)" @paste="handlePaste"
+                                    x-model="currentScene.content" style="outline:none;direction:ltr;resize:none;"
+                                    dir="ltr" placeholder="Start writing your scene here..."></textarea>
 
                                 <!-- Preview Mode: Rendered HTML -->
                                 <div x-show="showMarkdownPreview" class="editor-preview"
@@ -570,7 +570,50 @@
 
                         <div class="beat-controls"
                             style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:0;">
-                            <div class="beat-actions" style="display:flex;gap:8px;align-items:center;">
+                            <div class="beat-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <div style="position:relative;">
+                                    <button class="btn btn-secondary" @click="showSpecialChars = !showSpecialChars"
+                                        title="Insert special character"
+                                        :disabled="!currentScene || showMarkdownPreview"
+                                        style="font-size:14px;padding:6px 12px;">
+                                        ⌘
+                                    </button>
+                                    <div x-show="showSpecialChars" @click.outside="showSpecialChars = false" x-cloak
+                                        style="position:absolute;left:0;bottom:100%;margin-bottom:4px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:8px;min-width:280px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                                        <div
+                                            style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;font-weight:600;">
+                                            INSERT SPECIAL CHARACTER</div>
+                                        <button @click="insertSpecialChar('—')" class="special-char-btn">Em dash — (long
+                                            dash)</button>
+                                        <button @click="insertSpecialChar('–')" class="special-char-btn">En dash –
+                                            (short dash)</button>
+                                        <button @click="insertSpecialChar('\u00A0')"
+                                            class="special-char-btn">Non-breaking space</button>
+                                        <button @click="insertSpecialChar('«')" class="special-char-btn">French quote «
+                                            (opening)</button>
+                                        <button @click="insertSpecialChar('»')" class="special-char-btn">French quote »
+                                            (closing)</button>
+                                        <button @click="insertSpecialChar('„')" class="special-char-btn">Low-high quote
+                                            „ (opening)</button>
+                                        <button @click="insertSpecialChar('"')" class="special-char-btn">Low-high quote " (closing)</button>
+                                        <button @click="insertSpecialChar(''' )" class="special-char-btn">Single quote
+                                            ' (opening)</button>
+                                        <button @click="insertSpecialChar(''')" class="special-char-btn">Single quote '
+                                            (closing)</button>
+                                        <button @click="insertSpecialChar('…')" class="special-char-btn">Ellipsis
+                                            …</button>
+                                        <button @click="insertSpecialChar('\u2003')" class="special-char-btn">Em space
+                                        </button>
+                                        <button @click="insertSpecialChar('\u2002')" class="special-char-btn">En space
+                                        </button>
+                                        <button @click="insertSpecialChar('\u2009')" class="special-char-btn">Thin space
+                                        </button>
+                                        <div
+                                            style="font-size:10px;color:var(--text-secondary);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                                            Tip: Type -- for em dash (—)</div>
+                                    </div>
+                                </div>
+
                                 <button class="generate-btn" @click="previewPrompt"
                                     :disabled="!beatInput || aiStatus !== 'ready'">
                                     Preview
@@ -584,6 +627,11 @@
                                 <button class="generate-btn" @click="showPromptsPanel = !showPromptsPanel"
                                     title="Toggle Prompts Panel" aria-label="Toggle prompts panel">
                                     Prompts
+                                </button>
+
+                                <button class="generate-btn" @click="loadPromptHistory(); showPromptHistory = true"
+                                    title="View Prompt History" aria-label="View prompt history">
+                                    History
                                 </button>
 
                                 <button class="btn btn-secondary" @click="showSceneOptions = !showSceneOptions"
@@ -1486,6 +1534,63 @@
                     <div class="modal-buttons">
                         <button class="btn btn-secondary" @click="showNewChapterModal = false">Cancel</button>
                         <button class="btn btn-primary" @click="createChapter">Create</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Prompt History Modal -->
+        <template x-if="showPromptHistory">
+            <div class="modal-overlay" @click.self="showPromptHistory = false">
+                <div class="modal" style="max-width:900px;max-height:80vh;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <h3 style="margin:0;">Prompt History</h3>
+                        <button class="btn btn-secondary" @click="showPromptHistory = false">Close</button>
+                    </div>
+
+                    <div style="overflow:auto;max-height:calc(80vh - 100px);">
+                        <template x-if="promptHistoryList.length === 0">
+                            <div style="color:var(--text-secondary);text-align:center;padding:40px;">
+                                No prompt history yet. Generate scenes to build your history.
+                            </div>
+                        </template>
+
+                        <template x-for="(item, idx) in promptHistoryList" :key="item.id">
+                            <div
+                                style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:12px;background:var(--bg-secondary);">
+                                <div
+                                    style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+                                    <div style="flex:1;">
+                                        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">
+                                            <span x-text="new Date(item.timestamp).toLocaleString()"></span>
+                                            <template x-if="item.sceneId">
+                                                <span> • Scene: <span
+                                                        x-text="scenes.find(s => s.id === item.sceneId)?.title || 'Unknown'"></span></span>
+                                            </template>
+                                        </div>
+                                        <div style="font-weight:500;margin-bottom:8px;">
+                                            <strong style="color:var(--text-secondary);font-size:11px;">Beat:</strong>
+                                            <div style="color:var(--text-primary);font-size:13px;margin-top:2px;"
+                                                x-text="item.beat"></div>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary"
+                                        @click="beatInput = item.beat; showPromptHistory = false"
+                                        style="font-size:11px;padding:4px 8px;">
+                                        Reuse Beat
+                                    </button>
+                                </div>
+
+                                <details style="margin-top:8px;">
+                                    <summary
+                                        style="cursor:pointer;color:var(--text-secondary);font-size:11px;user-select:none;">
+                                        View Full Prompt
+                                    </summary>
+                                    <pre style="margin-top:8px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;overflow:auto;max-height:300px;white-space:pre-wrap;word-wrap:break-word;"
+                                        x-text="item.prompt"></pre>
+                                </details>
+                            </div>
+                        </template>
                     </div>
                 </div>
             </div>
