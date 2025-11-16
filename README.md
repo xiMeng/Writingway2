@@ -74,8 +74,7 @@ Unlike its predecessor, this new version is built with **JavaScript + HTML**, ma
    - [CPU only](https://github.com/ggerganov/llama.cpp/releases) - Download `llama-*-bin-win-avx2-x64.zip`
    - Extract `llama-server.exe` to the Writingway folder
 4. **Download a model** (optional, for local AI):
-   - [Qwen2.5-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) (2.5GB, fast)
-   - [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF) (5GB, better quality)
+   - [Qwen3-4B-Instruct](https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_K_M.gguf?download=true)
    - Put the `.gguf` file in the `models/` folder
 5. Double-click **`start.bat`**
 6. Writingway opens at **http://localhost:8000**
