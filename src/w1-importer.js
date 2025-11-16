@@ -210,15 +210,26 @@
 
                 for (const entry of (category.entries || [])) {
                     const entryId = Date.now().toString() + '-comp-' + Math.random().toString(36).slice(2, 8);
+
+                    // Convert HTML content to plain text if needed
+                    let plainContent = entry.content || '';
+                    if (plainContent.includes('<')) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = plainContent;
+                        plainContent = tempDiv.textContent || tempDiv.innerText || '';
+                    }
+
                     await db.compendium.add({
                         id: entryId,
                         projectId: projectId,
                         category: w2Category,
-                        title: entry.name,
-                        content: entry.content || '',
+                        title: entry.name || 'Untitled',
+                        body: plainContent,  // W2 uses 'body' not 'content'
+                        summary: '',
                         tags: [],
-                        image: null,
-                        modified: new Date()
+                        created: new Date(),
+                        modified: new Date(),
+                        order: 0
                     });
                 }
             }
