@@ -348,7 +348,8 @@
                         const htmlText = content ? (content.text || '') : '';
 
                         // Export as plain text/Markdown
-                        const safeTitle = (s.title || 'scene').replace(/[^a-z0-9\-_. ]/ig, '_').slice(0, 80).trim();
+                        // Only remove filesystem-unsafe characters, keep Unicode (Cyrillic, etc.)
+                        const safeTitle = (s.title || 'scene').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 80).trim();
                         const filename = `scenes/${String(s.order).padStart(2, '0')}-${safeTitle || s.id}.txt`;
                         chapterObj.scenes.push({ id: s.id, title: s.title, order: s.order, filename });
                         zip.file(filename, htmlText || '');
@@ -368,7 +369,8 @@
                 zip.file('metadata.json', JSON.stringify(meta, null, 2));
 
                 const blob = await zip.generateAsync({ type: 'blob' });
-                const nameSafe = (app.currentProject.name || 'project').replace(/[^a-z0-9\-_. ]/ig, '_').slice(0, 80).trim();
+                // Only remove filesystem-unsafe characters, keep Unicode (Cyrillic, etc.)
+                const nameSafe = (app.currentProject.name || 'project').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 80).trim();
                 const fname = `${nameSafe || 'writingway_project'}.zip`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
