@@ -357,6 +357,7 @@ document.addEventListener('alpine:init', () => {
         showSummaryPanel: false,
         summaryText: '',
         summaryTargetSceneId: null,
+        summaryTargetChapterId: null,
         selectedSummaryPromptId: null,
         showSummaryPromptList: false,
 
@@ -1105,10 +1106,24 @@ document.addEventListener('alpine:init', () => {
             try {
                 const scene = (this.scenes || []).find(s => s.id === sceneId) || (this.currentScene && this.currentScene.id === sceneId ? this.currentScene : null);
                 this.summaryTargetSceneId = sceneId;
+                this.summaryTargetChapterId = null;
                 this.summaryText = (scene && (scene.summary || '')) || '';
                 this.showSummaryPanel = true;
             } catch (e) {
                 console.error('openSceneSummary error', e);
+            }
+        },
+
+        // Open the summary slide-panel for a chapter
+        async openChapterSummary(chapterId) {
+            try {
+                const chapter = (this.chapters || []).find(c => c.id === chapterId);
+                this.summaryTargetChapterId = chapterId;
+                this.summaryTargetSceneId = null;
+                this.summaryText = (chapter && (chapter.summary || '')) || '';
+                this.showSummaryPanel = true;
+            } catch (e) {
+                console.error('openChapterSummary error', e);
             }
         },
 
@@ -1234,6 +1249,114 @@ document.addEventListener('alpine:init', () => {
                 setTimeout(() => { this.saveStatus = 'Saved'; }, 1200);
             } catch (e) {
                 console.error('saveSceneSummary error', e);
+            }
+        },
+
+        // Generate chapter summary from all scene summaries in the chapter
+        async summarizeChapter() {
+            try {
+                const id = this.summaryTargetChapterId;
+                if (!id) return;
+
+                const chapter = (this.chapters || []).find(c => c.id === id);
+                if (!chapter || !chapter.scenes || chapter.scenes.length === 0) {
+                    this.summaryText = 'No scenes in this chapter to summarize.';
+                    return;
+                }
+
+                // Check if we should use AI or heuristic
+                const summaryPrompts = this.prompts.filter(p => p.category === 'summary');
+                const usePrompt = this.selectedSummaryPromptId
+                    ? summaryPrompts.find(p => p.id === this.selectedSummaryPromptId)
+                    : summaryPrompts[0]; // Use first summary prompt as default
+
+                // Collect all scene summaries
+                const sceneSummaries = chapter.scenes
+                    .filter(s => s.summary)
+                    .map(s => `${s.title}: ${s.summary}`)
+                    .join('\n\n');
+
+                if (!sceneSummaries) {
+                    this.summaryText = 'No scene summaries available. Please summarize individual scenes first.';
+                    return;
+                }
+
+                // If we have a summary prompt and AI is ready, use AI
+                if (usePrompt && window.Generation && this.aiStatus === 'ready') {
+                    try {
+                        this.summaryText = 'Generating chapter summary...';
+                        const promptText = usePrompt.content || '';
+
+                        // Build proper messages array with system instruction and user content
+                        const messages = [
+                            { role: 'system', content: promptText },
+                            { role: 'user', content: `Please create a cohesive chapter summary from these scene summaries:\n\n${sceneSummaries}` }
+                        ];
+
+                        console.log('🎯 Summarizing chapter with prompt:', usePrompt.title);
+                        console.log('📝 Chapter:', chapter.title);
+                        console.log('📄 Scene summaries count:', chapter.scenes.filter(s => s.summary).length);
+
+                        let result = '';
+                        await window.Generation.streamGeneration(messages, (token) => {
+                            if (result === '' && this.summaryText === 'Generating chapter summary...') {
+                                this.summaryText = '';
+                            }
+                            result += token;
+                            this.summaryText = result;
+                        }, this);
+                        return;
+                    } catch (aiError) {
+                        console.warn('AI chapter summary failed, falling back to heuristic:', aiError);
+                        // Fall through to heuristic below
+                    }
+                }
+
+                // Fallback: Simple concatenation of scene summaries
+                this.summaryText = sceneSummaries;
+            } catch (e) {
+                console.error('summarizeChapter error', e);
+            }
+        },
+
+        // Save the chapter summary into IndexedDB and update in-memory chapter
+        async saveChapterSummary() {
+            try {
+                const id = this.summaryTargetChapterId;
+                if (!id) return;
+
+                // Update DB
+                try {
+                    const cur = await db.chapters.get(id) || {};
+                    const merged = Object.assign({}, cur, {
+                        summary: this.summaryText,
+                        summaryUpdated: new Date().toISOString(),
+                        summarySource: 'manual',
+                        summaryStale: false,
+                        modified: new Date(),
+                        id
+                    });
+                    await db.chapters.put(merged);
+                } catch (e) {
+                    console.warn('[App] saveChapterSummary write/readback failed', e);
+                }
+
+                // Update in-memory chapters list
+                const ch = this.chapters.find(c => c.id === id);
+                if (ch) {
+                    ch.summary = this.summaryText;
+                    ch.summaryUpdated = new Date().toISOString();
+                    ch.summarySource = 'manual';
+                    ch.summaryStale = false;
+                }
+
+                this.showSummaryPanel = false;
+                this.summaryTargetChapterId = null;
+                this.summaryText = '';
+
+                console.log('✅ Chapter summary saved:', id);
+            } catch (e) {
+                console.error('saveChapterSummary error', e);
             }
         },
 
