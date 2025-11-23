@@ -92,6 +92,11 @@
                         );
                         if (shouldReload) {
                             await app.loadScene?.(data.id);
+                        } else {
+                            // User chose to keep their version - update timestamp to prevent repeated conflicts
+                            if (app.currentScene) {
+                                app.currentScene.loadedUpdatedAt = updatedScene.updatedAt;
+                            }
                         }
                     }
                 } else if (app.currentProject?.id === data.projectId) {
