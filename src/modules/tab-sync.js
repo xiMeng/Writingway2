@@ -337,7 +337,11 @@
                 // Add visual indicator that this is read-only
                 editor.style.backgroundColor = 'var(--bg-secondary)';
                 editor.style.cursor = 'not-allowed';
+                editor.style.opacity = '0.7';
                 editor.title = 'Read-only: Open in the first tab to edit';
+
+                // Add a prominent banner to the editor header
+                addReadOnlyBanner();
 
                 // Show notification
                 if (app.currentScene) {
@@ -346,13 +350,67 @@
             } else {
                 editor.style.backgroundColor = '';
                 editor.style.cursor = '';
+                editor.style.opacity = '';
                 editor.title = '';
+
+                // Remove read-only banner
+                removeReadOnlyBanner();
             }
         }
 
         // Store state for future reference
         if (app) {
             app.isReadOnlyTab = readonly;
+        }
+    }
+
+    function addReadOnlyBanner() {
+        // Remove existing banner if any
+        removeReadOnlyBanner();
+
+        const editorHeader = document.querySelector('.editor-header');
+        if (!editorHeader) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'readonly-banner';
+        banner.style.cssText = `
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            padding: 12px 30px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 14px;
+            border-bottom: 2px solid rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        `;
+
+        banner.innerHTML = `
+            <span style="font-size: 20px;">🔒</span>
+            <span>READ-ONLY MODE: This is not the primary tab. Close other tabs or use the first tab to edit.</span>
+        `;
+
+        editorHeader.insertAdjacentElement('afterend', banner);
+
+        // Update document title
+        const originalTitle = document.title;
+        if (!originalTitle.startsWith('🔒')) {
+            document.title = '🔒 READ-ONLY | ' + originalTitle;
+        }
+    }
+
+    function removeReadOnlyBanner() {
+        const banner = document.getElementById('readonly-banner');
+        if (banner) {
+            banner.remove();
+        }
+
+        // Restore document title
+        if (document.title.startsWith('🔒 READ-ONLY | ')) {
+            document.title = document.title.replace('🔒 READ-ONLY | ', '');
         }
     }
 
