@@ -46,10 +46,15 @@
         // Track user activity to avoid interrupting active editing
         const trackActivity = () => {
             lastActivityTime = Date.now();
+            console.log('👆 Activity tracked at', lastActivityTime);
         };
         document.addEventListener('keydown', trackActivity);
+        document.addEventListener('keyup', trackActivity);
         document.addEventListener('click', trackActivity);
         document.addEventListener('input', trackActivity);
+        document.addEventListener('change', trackActivity);
+        document.addEventListener('mousedown', trackActivity);
+        document.addEventListener('focus', trackActivity, true); // Use capture to catch all focus events
 
         channel.onmessage = async (event) => {
             const { type, data, tabId } = event.data;
