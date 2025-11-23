@@ -42,10 +42,15 @@
         channel.onmessage = async (event) => {
             const { type, data, tabId } = event.data;
 
+            console.log('📨 Raw broadcast received:', { type, fromTabId: tabId, myTabId: TAB_ID, isOwnBroadcast: tabId === TAB_ID });
+
             // Ignore messages from this tab
             if (tabId === TAB_ID) {
+                console.log('🚫 Ignoring own broadcast');
                 return;
             }
+
+            console.log('📡 Processing sync message:', type, data);
 
             try {
                 await handleMessage(type, data);
@@ -170,7 +175,7 @@
         if (!channel) return;
 
         const message = { type, data, timestamp: Date.now(), tabId: TAB_ID };
-        console.log('📤 Broadcasting:', message);
+        console.log('📤 Broadcasting from TAB_ID:', TAB_ID, 'message:', message);
         channel.postMessage(message);
     }
 
