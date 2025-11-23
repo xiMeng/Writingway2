@@ -3,6 +3,14 @@
     async function saveScene(app, opts) {
         if (!app) return false;
         opts = opts || {};
+
+        // Prevent saving from read-only tabs (non-primary tabs)
+        if (window.TabSync && !window.TabSync.isPrimaryTab()) {
+            console.warn('🚫 Cannot save from read-only tab');
+            app.saveStatus = 'Read-only tab';
+            return false;
+        }
+
         try {
             app.isSaving = true;
             app.saveStatus = 'Saving...';

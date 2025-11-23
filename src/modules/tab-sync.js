@@ -7,6 +7,11 @@
 
     // Unique identifier for this tab instance
     const TAB_ID = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const TAB_TIMESTAMP = Date.now();
+
+    // Track which tabs exist and determine if this is the primary (editor) tab
+    let knownTabs = new Set([TAB_ID]);
+    let isPrimaryTab = true; // Assume primary until we hear from an older tab
 
     // Track last user activity to avoid interrupting active editing
     let lastActivityTime = Date.now();
@@ -14,6 +19,8 @@
 
     // Message types
     const MSG_TYPES = {
+        TAB_ANNOUNCEMENT: 'tab:announcement',
+        TAB_CLOSED: 'tab:closed',
         PROJECT_SAVED: 'project:saved',
         CHAPTER_SAVED: 'chapter:saved',
         SCENE_SAVED: 'scene:saved',
@@ -43,10 +50,18 @@
         app = appInstance;
         channel = new BroadcastChannel(CHANNEL_NAME);
 
+        // Announce this tab's presence
+        broadcast(MSG_TYPES.TAB_ANNOUNCEMENT, { tabId: TAB_ID, timestamp: TAB_TIMESTAMP });
+        console.log('📢 Tab announced:', { TAB_ID, TAB_TIMESTAMP, isPrimaryTab });
+
+        // Listen for beforeunload to announce tab closing
+        window.addEventListener('beforeunload', () => {
+            broadcast(MSG_TYPES.TAB_CLOSED, { tabId: TAB_ID });
+        });
+
         // Track user activity to avoid interrupting active editing
         const trackActivity = () => {
             lastActivityTime = Date.now();
-            console.log('👆 Activity tracked at', lastActivityTime);
         };
         document.addEventListener('keydown', trackActivity);
         document.addEventListener('keyup', trackActivity);
@@ -83,6 +98,43 @@
         if (!app) return;
 
         switch (type) {
+            case MSG_TYPES.TAB_ANNOUNCEMENT:
+                // Another tab is announcing itself
+                knownTabs.add(data.tabId);
+
+                // If the announcing tab is older than us, we're not primary
+                if (data.timestamp < TAB_TIMESTAMP) {
+                    if (isPrimaryTab) {
+                        isPrimaryTab = false;
+                        console.log('🔒 This tab is now READ-ONLY (older tab detected)');
+                        setEditorReadOnly(true);
+                    }
+                } else {
+                    // We're older - remind them we exist
+                    broadcast(MSG_TYPES.TAB_ANNOUNCEMENT, { tabId: TAB_ID, timestamp: TAB_TIMESTAMP });
+                }
+                break;
+
+            case MSG_TYPES.TAB_CLOSED:
+                knownTabs.delete(data.tabId);
+
+                // Check if we should become primary (if we're the oldest remaining tab)
+                let shouldBePrimary = true;
+                for (const otherTabId of knownTabs) {
+                    if (otherTabId !== TAB_ID) {
+                        // We can't determine age from ID alone, so stay read-only to be safe
+                        shouldBePrimary = false;
+                        break;
+                    }
+                }
+
+                if (shouldBePrimary && !isPrimaryTab) {
+                    isPrimaryTab = true;
+                    console.log('✏️ This tab is now PRIMARY (other tabs closed)');
+                    setEditorReadOnly(false);
+                }
+                break;
+
             case MSG_TYPES.PROJECT_SAVED:
                 // Reload projects list if on project selection screen
                 if (!app.currentProject || app.currentProject.id === data.id) {
@@ -205,6 +257,37 @@
         }
     }
 
+    function setEditorReadOnly(readonly) {
+        if (!app) return;
+
+        // Find the editor textarea
+        const editor = document.querySelector('.editor-textarea');
+        if (editor) {
+            editor.readOnly = readonly;
+
+            if (readonly) {
+                // Add visual indicator that this is read-only
+                editor.style.backgroundColor = 'var(--bg-secondary)';
+                editor.style.cursor = 'not-allowed';
+                editor.title = 'Read-only: Open in the first tab to edit';
+
+                // Show notification
+                if (app.currentScene) {
+                    alert('⚠️ Editor is READ-ONLY\n\nOnly the first tab can edit scenes to prevent conflicts.\n\nYou can still use other features like Settings, Workshop, etc.');
+                }
+            } else {
+                editor.style.backgroundColor = '';
+                editor.style.cursor = '';
+                editor.title = '';
+            }
+        }
+
+        // Store state for future reference
+        if (app) {
+            app.isReadOnlyTab = readonly;
+        }
+    }
+
     function broadcast(type, data) {
         if (!channel) return;
 
@@ -226,6 +309,9 @@
         init,
         broadcast,
         destroy,
-        MSG_TYPES
+        MSG_TYPES,
+        TAB_ID,
+        isPrimaryTab: () => isPrimaryTab,
+        setReadOnly: setEditorReadOnly
     };
 })();
