@@ -800,9 +800,9 @@
                                     <!-- Max Tokens -->
                                     <label
                                         style="font-size:12px;color:var(--text-secondary);margin-top:12px;display:block;"
-                                        title="Maximum length of generated text. 100-200 = short paragraph, 300-500 = multiple paragraphs, 800-1500 = longer scenes, 2000 = very long.">
+                                        title="Maximum length of generated text. 100-200 = short paragraph, 300-500 = multiple paragraphs, 800-1500 = longer scenes, 2000-5000 = very long, 10000+ = thinking models with reasoning.">
                                         MAX LENGTH: <span x-text="maxTokens"></span> tokens
-                                        <input type="range" x-model.number="maxTokens" min="100" max="2000" step="50"
+                                        <input type="range" x-model.number="maxTokens" min="100" max="20000" step="100"
                                             @input="saveGenerationParams()" style="width:100%;margin-top:6px;">
                                         <div
                                             style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-tertiary);margin-top:2px;">
