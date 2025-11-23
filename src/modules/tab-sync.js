@@ -10,8 +10,11 @@
     const TAB_TIMESTAMP = Date.now();
 
     // Track which tabs exist and determine if this is the primary (editor) tab
-    let knownTabs = new Set([TAB_ID]);
+    let knownTabs = new Map(); // Map of tabId -> { timestamp, lastHeartbeat }
     let isPrimaryTab = true; // Assume primary until we hear from an older tab
+    let heartbeatInterval = null;
+    const HEARTBEAT_INTERVAL = 2000; // Send heartbeat every 2 seconds
+    const TAB_TIMEOUT = 6000; // Consider tab dead after 6 seconds without heartbeat
 
     // Track last user activity to avoid interrupting active editing
     let lastActivityTime = Date.now();
@@ -20,6 +23,7 @@
     // Message types
     const MSG_TYPES = {
         TAB_ANNOUNCEMENT: 'tab:announcement',
+        TAB_HEARTBEAT: 'tab:heartbeat',
         TAB_CLOSED: 'tab:closed',
         PROJECT_SAVED: 'project:saved',
         CHAPTER_SAVED: 'chapter:saved',
@@ -50,13 +54,23 @@
         app = appInstance;
         channel = new BroadcastChannel(CHANNEL_NAME);
 
+        // Register this tab
+        knownTabs.set(TAB_ID, { timestamp: TAB_TIMESTAMP, lastHeartbeat: Date.now() });
+
         // Announce this tab's presence
         broadcast(MSG_TYPES.TAB_ANNOUNCEMENT, { tabId: TAB_ID, timestamp: TAB_TIMESTAMP });
         console.log('📢 Tab announced:', { TAB_ID, TAB_TIMESTAMP, isPrimaryTab });
 
+        // Start heartbeat to signal we're alive
+        startHeartbeat();
+
+        // Periodically check for dead tabs
+        setInterval(checkForDeadTabs, 3000);
+
         // Listen for beforeunload to announce tab closing
         window.addEventListener('beforeunload', () => {
             broadcast(MSG_TYPES.TAB_CLOSED, { tabId: TAB_ID });
+            stopHeartbeat();
         });
 
         // Track user activity to avoid interrupting active editing
@@ -100,7 +114,7 @@
         switch (type) {
             case MSG_TYPES.TAB_ANNOUNCEMENT:
                 // Another tab is announcing itself
-                knownTabs.add(data.tabId);
+                knownTabs.set(data.tabId, { timestamp: data.timestamp, lastHeartbeat: Date.now() });
 
                 // If the announcing tab is older than us, we're not primary
                 if (data.timestamp < TAB_TIMESTAMP) {
@@ -115,27 +129,28 @@
                 }
                 break;
 
-            case MSG_TYPES.TAB_CLOSED:
-                knownTabs.delete(data.tabId);
+            case MSG_TYPES.TAB_HEARTBEAT:
+                // Update last heartbeat time for this tab
+                const tabInfo = knownTabs.get(data.tabId);
+                if (tabInfo) {
+                    tabInfo.lastHeartbeat = Date.now();
+                } else {
+                    // New tab we didn't know about - add it
+                    knownTabs.set(data.tabId, { timestamp: data.timestamp || Date.now(), lastHeartbeat: Date.now() });
 
-                // Check if we should become primary (if we're the oldest remaining tab)
-                let shouldBePrimary = true;
-                for (const otherTabId of knownTabs) {
-                    if (otherTabId !== TAB_ID) {
-                        // We can't determine age from ID alone, so stay read-only to be safe
-                        shouldBePrimary = false;
-                        break;
+                    // Check if we should demote to read-only
+                    if ((data.timestamp || Date.now()) < TAB_TIMESTAMP && isPrimaryTab) {
+                        isPrimaryTab = false;
+                        console.log('🔒 This tab is now READ-ONLY (older tab heartbeat detected)');
+                        setEditorReadOnly(true);
                     }
-                }
-
-                if (shouldBePrimary && !isPrimaryTab) {
-                    isPrimaryTab = true;
-                    console.log('✏️ This tab is now PRIMARY (other tabs closed)');
-                    setEditorReadOnly(false);
                 }
                 break;
 
-            case MSG_TYPES.PROJECT_SAVED:
+            case MSG_TYPES.TAB_CLOSED:
+                knownTabs.delete(data.tabId);
+                checkIfShouldBecomePrimary();
+                break; case MSG_TYPES.PROJECT_SAVED:
                 // Reload projects list if on project selection screen
                 if (!app.currentProject || app.currentProject.id === data.id) {
                     await app.loadProjects?.();
@@ -254,6 +269,59 @@
                     await app.loadWorkshopSessions?.();
                 }
                 break;
+        }
+    }
+
+    function startHeartbeat() {
+        if (heartbeatInterval) return;
+
+        heartbeatInterval = setInterval(() => {
+            broadcast(MSG_TYPES.TAB_HEARTBEAT, { tabId: TAB_ID, timestamp: TAB_TIMESTAMP });
+        }, HEARTBEAT_INTERVAL);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+    }
+
+    function checkForDeadTabs() {
+        const now = Date.now();
+        let removedAny = false;
+
+        for (const [tabId, info] of knownTabs.entries()) {
+            if (tabId === TAB_ID) continue; // Don't check ourselves
+
+            if (now - info.lastHeartbeat > TAB_TIMEOUT) {
+                console.log('💀 Tab considered dead (no heartbeat):', tabId);
+                knownTabs.delete(tabId);
+                removedAny = true;
+            }
+        }
+
+        if (removedAny) {
+            checkIfShouldBecomePrimary();
+        }
+    }
+
+    function checkIfShouldBecomePrimary() {
+        // Check if we should become primary (if we're the oldest remaining tab)
+        let shouldBePrimary = true;
+        let oldestTimestamp = TAB_TIMESTAMP;
+
+        for (const [tabId, info] of knownTabs.entries()) {
+            if (tabId !== TAB_ID && info.timestamp < oldestTimestamp) {
+                shouldBePrimary = false;
+                break;
+            }
+        }
+
+        if (shouldBePrimary && !isPrimaryTab) {
+            isPrimaryTab = true;
+            console.log('✏️ This tab is now PRIMARY (oldest remaining tab)');
+            setEditorReadOnly(false);
         }
     }
 
