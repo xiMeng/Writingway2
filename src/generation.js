@@ -125,7 +125,7 @@
 
         if (aiMode === 'api') {
             // API Mode - use configured provider with messages
-            return await streamGenerationAPI(messages || promptStr, onToken, aiProvider, aiApiKey, aiModel, aiEndpoint, temperature, maxTokens);
+            return await streamGenerationAPI(messages || promptStr, onToken, aiProvider, aiApiKey, aiModel, aiEndpoint, temperature, maxTokens, app);
         } else {
             // Local Mode - use llama-server with string prompt
             return await streamGenerationLocal(promptStr, onToken, aiEndpoint, temperature, maxTokens);
@@ -199,7 +199,7 @@
         }
     }
 
-    async function streamGenerationAPI(prompt, onToken, provider, apiKey, model, customEndpoint, temperature, maxTokens) {
+    async function streamGenerationAPI(prompt, onToken, provider, apiKey, model, customEndpoint, temperature, maxTokens, app) {
         // API Mode - construct request based on provider
         let url, headers, body;
 
