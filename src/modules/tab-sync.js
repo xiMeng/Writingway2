@@ -74,11 +74,21 @@
             case MSG_TYPES.SCENE_SAVED:
                 // Reload scene if it's currently open in another tab
                 if (app.currentScene?.id === data.id) {
+                    console.log('🔍 SCENE_SAVED handler triggered for current scene:', {
+                        sceneId: data.id,
+                        currentLoadedTimestamp: app.currentScene.loadedUpdatedAt,
+                        incomingTimestamp: data.updatedAt
+                    });
+
                     const updatedScene = await db.scenes.get(data.id);
                     // Only show conflict if the DB version is newer than what we loaded
                     const loadedTimestamp = app.currentScene.loadedUpdatedAt || 0;
+
+                    console.log('🔍 DB scene updatedAt:', updatedScene?.updatedAt, 'vs loaded:', loadedTimestamp);
+
                     if (updatedScene && updatedScene.updatedAt && updatedScene.updatedAt > loadedTimestamp) {
                         // Scene was modified in another tab
+                        console.warn('⚠️ Showing conflict dialog');
                         const shouldReload = confirm(
                             `This scene was modified in another tab.\n\n` +
                             `Click OK to reload the latest version, or Cancel to keep your current changes.`
@@ -86,6 +96,8 @@
                         if (shouldReload) {
                             await app.loadScene?.(data.id);
                         }
+                    } else {
+                        console.log('✅ No conflict detected, skipping popup');
                     }
                 } else if (app.currentProject?.id === data.projectId) {
                     // Refresh scene list if viewing same project but different scene

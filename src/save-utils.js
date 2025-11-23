@@ -174,6 +174,12 @@
                 // (debug logs removed)
             } catch (e) { /* ignore */ }
 
+            // Update the loaded timestamp to prevent false conflict on next broadcast
+            if (app.currentScene && app.currentScene.id === scene.id) {
+                app.currentScene.loadedUpdatedAt = now;
+                app.currentScene.contentLoadedUpdatedAt = now;
+            }
+
             app.saveStatus = 'Saved';
             return true;
         } catch (err) {
