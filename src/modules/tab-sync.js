@@ -44,11 +44,8 @@
 
             // Ignore messages from this tab
             if (tabId === TAB_ID) {
-                console.log('🚫 Ignoring own broadcast:', type, 'from', tabId);
                 return;
             }
-
-            console.log('📡 Received sync message:', type, data, 'from tab:', tabId, '(my ID:', TAB_ID + ')');
 
             try {
                 await handleMessage(type, data);
