@@ -297,12 +297,44 @@
         });
 
         if (!response.ok) {
-            throw new Error(`API returned ${response.status}: ${await response.text()}`);
+            const errorText = await response.text();
+            console.error('❌ API Error:', response.status, errorText);
+            throw new Error(`API returned ${response.status}: ${errorText}`);
+        }
+
+        // Check if response is actually streaming or if it's a complete response
+        const contentType = response.headers.get('content-type');
+
+        // Some thinking models don't support streaming and return complete JSON
+        if (contentType?.includes('application/json') && !contentType?.includes('text/event-stream')) {
+            console.log('📦 Non-streaming response detected (likely thinking model)');
+            const data = await response.json();
+
+            // Extract content from non-streaming response
+            let content = null;
+            if (provider === 'openrouter' || provider === 'openai' || provider === 'custom') {
+                content = data.choices?.[0]?.message?.content;
+            } else if (provider === 'anthropic') {
+                content = data.content?.[0]?.text;
+            } else if (provider === 'google') {
+                content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            }
+
+            if (content) {
+                // Emit content in chunks to simulate streaming
+                const words = content.split(/(\s+)/);
+                for (const word of words) {
+                    onToken(word);
+                    await new Promise(resolve => setTimeout(resolve, 10)); // Small delay for UI
+                }
+            }
+            return;
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let hasReceivedContent = false;
 
         while (true) {
             const { done, value } = await reader.read();
@@ -319,14 +351,30 @@
                     // Handle different streaming formats
                     let jsonStr = line;
                     if (line.startsWith('data: ')) jsonStr = line.slice(6);
-                    if (jsonStr === '[DONE]') return;
+                    if (jsonStr === '[DONE]') {
+                        if (!hasReceivedContent) {
+                            console.warn('⚠️ Stream ended without content - possible thinking model without streaming support');
+                        }
+                        return;
+                    }
 
                     const data = JSON.parse(jsonStr);
 
                     // Extract token based on provider format
                     let token = null;
                     if (provider === 'openrouter' || provider === 'openai' || provider === 'custom') {
-                        token = data.choices?.[0]?.delta?.content;
+                        // For thinking models (o1, o3, etc), reasoning is in a separate field
+                        // We want to capture both reasoning and regular content
+                        const delta = data.choices?.[0]?.delta;
+                        if (delta) {
+                            // Try reasoning_content first (for thinking models)
+                            token = delta.reasoning_content || delta.content;
+                        }
+
+                        // Some models put the complete message in the first chunk
+                        if (!token && data.choices?.[0]?.message?.content) {
+                            token = data.choices[0].message.content;
+                        }
                     } else if (provider === 'anthropic') {
                         if (data.type === 'content_block_delta') {
                             token = data.delta?.text;
@@ -335,11 +383,20 @@
                         token = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     }
 
-                    if (token) onToken(token);
+                    if (token) {
+                        hasReceivedContent = true;
+                        onToken(token);
+                    }
                 } catch (e) {
                     // Ignore parse errors for incomplete chunks
+                    console.debug('Parse error (likely incomplete chunk):', e);
                 }
             }
+        }
+
+        if (!hasReceivedContent) {
+            console.error('⚠️ No content received from stream');
+            throw new Error('No content received from API. This model may not support streaming or may require different parameters.');
         }
     }
 
