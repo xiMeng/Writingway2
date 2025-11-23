@@ -44,10 +44,11 @@
 
             // Ignore messages from this tab
             if (tabId === TAB_ID) {
+                console.log('🚫 Ignoring own broadcast:', type, 'from', tabId);
                 return;
             }
 
-            console.log('📡 Received sync message:', type, data);
+            console.log('📡 Received sync message:', type, data, 'from tab:', tabId, '(my ID:', TAB_ID + ')');
 
             try {
                 await handleMessage(type, data);
@@ -78,14 +79,27 @@
                 break;
 
             case MSG_TYPES.SCENE_SAVED:
+                console.log('🔍 SCENE_SAVED handler:', {
+                    incomingSceneId: data.id,
+                    currentSceneId: app.currentScene?.id,
+                    match: app.currentScene?.id === data.id
+                });
+
                 // Reload scene if it's currently open in another tab
                 if (app.currentScene?.id === data.id) {
                     const updatedScene = await db.scenes.get(data.id);
                     // Only show conflict if the DB version is newer than what we loaded
                     const loadedTimestamp = app.currentScene.loadedUpdatedAt || 0;
 
+                    console.log('🔍 Timestamp check:', {
+                        dbUpdatedAt: updatedScene?.updatedAt,
+                        loadedUpdatedAt: loadedTimestamp,
+                        willShowConflict: updatedScene?.updatedAt > loadedTimestamp
+                    });
+
                     if (updatedScene && updatedScene.updatedAt && updatedScene.updatedAt > loadedTimestamp) {
                         // Scene was modified in another tab
+                        console.warn('⚠️ Showing conflict dialog');
                         const shouldReload = confirm(
                             `This scene was modified in another tab.\n\n` +
                             `Click OK to reload the latest version, or Cancel to keep your current changes.`
@@ -94,6 +108,7 @@
                             await app.loadScene?.(data.id);
                         } else {
                             // User chose to keep their version - update timestamp to prevent repeated conflicts
+                            console.log('✅ User cancelled, updating loadedUpdatedAt to', updatedScene.updatedAt);
                             if (app.currentScene) {
                                 app.currentScene.loadedUpdatedAt = updatedScene.updatedAt;
                             }

@@ -176,6 +176,7 @@
 
             // Update the loaded timestamp to prevent false conflict on next broadcast
             if (app.currentScene && app.currentScene.id === scene.id) {
+                console.log('💾 Save complete, updating loadedUpdatedAt to', now);
                 app.currentScene.loadedUpdatedAt = now;
                 app.currentScene.contentLoadedUpdatedAt = now;
             }
