@@ -8,6 +8,16 @@
     <!-- Note: This file should be named main.html and opened via start.bat -->
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Phase 1 Refactoring: Database and test helpers extracted -->
+    <script defer src="src/db.js"></script>
+    <script defer src="src/test-helpers.js"></script>
+    <!-- Phase 2 Refactoring: State management extracted -->
+    <script defer src="src/state/app-state.js"></script>
+    <script defer src="src/state/watchers.js"></script>
+    <!-- Phase 3 Refactoring: Editor functionality extracted -->
+    <script defer src="src/modules/editor.js"></script>
+    <!-- Phase 4 Refactoring: Context panel extracted -->
+    <script defer src="src/modules/context-panel.js"></script>
     <script defer src="src/prompts.js"></script>
     <script defer src="src/generation.js"></script>
     <script defer src="src/ai.js"></script>
@@ -752,11 +762,13 @@
                                             (closing)</button>
                                         <button @click="insertSpecialChar('„')" class="special-char-btn">Low-high quote
                                             „ (opening)</button>
-                                        <button @click="insertSpecialChar('"')" class="special-char-btn">Low-high quote " (closing)</button>
-                                        <button @click="insertSpecialChar(''' )" class="special-char-btn">Single quote
+                                        <button @click="insertSpecialChar('&quot;')" class="special-char-btn">Low-high
+                                            quote " (closing)</button>
+                                        <button @click="insertSpecialChar(&#39;)" class="special-char-btn">Single quote
                                             ' (opening)</button>
-                                        <button @click="insertSpecialChar(''')" class="special-char-btn">Single quote '
-                                            (closing)</button>
+                                        <button @click="insertSpecialChar(&#39;)" class="special-char-btn">Single quote
+                                            ' (closing)</button>
+                                        <button @click="insertSpecialChar(')')" class="special-char-btn">)</button>
                                         <button @click="insertSpecialChar('…')" class="special-char-btn">Ellipsis
                                             …</button>
                                         <button @click="insertSpecialChar('\u2003')" class="special-char-btn">Em space
