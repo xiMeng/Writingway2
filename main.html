@@ -1141,6 +1141,76 @@
             </div>
         </template>
 
+        <!-- Export Format Selection Modal -->
+        <template x-if="showExportModal">
+            <div class="modal-overlay" @click.self="showExportModal = false">
+                <div class="modal" style="max-width:500px;">
+                    <h3>Export Project</h3>
+                    <p style="margin:0 0 20px 0;color:var(--text-secondary);font-size:14px;">Choose your export format:
+                    </p>
+
+                    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+                        <label
+                            style="display:flex;align-items:start;gap:12px;padding:16px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.2s;"
+                            :style="exportFormat === 'zip' ? 'border-color:var(--accent);background:rgba(74,158,255,0.1);' : ''"
+                            @click="exportFormat = 'zip'">
+                            <input type="radio" name="exportFormat" value="zip" x-model="exportFormat"
+                                style="margin-top:2px;">
+                            <div style="flex:1;">
+                                <div style="font-weight:600;margin-bottom:4px;">📦 ZIP Archive (TXT)</div>
+                                <div style="font-size:13px;color:var(--text-secondary);">Organized folder structure with
+                                    plain text files. Best for backups and re-importing.</div>
+                            </div>
+                        </label>
+
+                        <label
+                            style="display:flex;align-items:start;gap:12px;padding:16px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.2s;"
+                            :style="exportFormat === 'epub' ? 'border-color:var(--accent);background:rgba(74,158,255,0.1);' : ''"
+                            @click="exportFormat = 'epub'">
+                            <input type="radio" name="exportFormat" value="epub" x-model="exportFormat"
+                                style="margin-top:2px;">
+                            <div style="flex:1;">
+                                <div style="font-weight:600;margin-bottom:4px;">📚 EPUB</div>
+                                <div style="font-size:13px;color:var(--text-secondary);">E-book format compatible with
+                                    most e-readers and reading apps.</div>
+                            </div>
+                        </label>
+
+                        <label
+                            style="display:flex;align-items:start;gap:12px;padding:16px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.2s;"
+                            :style="exportFormat === 'html' ? 'border-color:var(--accent);background:rgba(74,158,255,0.1);' : ''"
+                            @click="exportFormat = 'html'">
+                            <input type="radio" name="exportFormat" value="html" x-model="exportFormat"
+                                style="margin-top:2px;">
+                            <div style="flex:1;">
+                                <div style="font-weight:600;margin-bottom:4px;">🌐 HTML</div>
+                                <div style="font-size:13px;color:var(--text-secondary);">Single web page with styling.
+                                    Can be converted to PDF using browser print.</div>
+                            </div>
+                        </label>
+
+                        <label
+                            style="display:flex;align-items:start;gap:12px;padding:16px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.2s;"
+                            :style="exportFormat === 'txt' ? 'border-color:var(--accent);background:rgba(74,158,255,0.1);' : ''"
+                            @click="exportFormat = 'txt'">
+                            <input type="radio" name="exportFormat" value="txt" x-model="exportFormat"
+                                style="margin-top:2px;">
+                            <div style="flex:1;">
+                                <div style="font-weight:600;margin-bottom:4px;">📄 Plain Text</div>
+                                <div style="font-size:13px;color:var(--text-secondary);">Single .txt file with all
+                                    content. Simple and universal.</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="modal-buttons">
+                        <button class="btn btn-secondary" @click="showExportModal = false">Cancel</button>
+                        <button class="btn btn-primary" @click="confirmExport()">Export</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
         <!-- Import from Writingway 1 Modal -->
         <template x-if="showW1ImportModal">
             <div class="modal-overlay" @click.self="showW1ImportModal = false">

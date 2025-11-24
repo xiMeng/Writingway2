@@ -277,6 +277,8 @@ document.addEventListener('alpine:init', () => {
         selectedProjectId: null,
         showRenameProjectModal: false,
         renameProjectName: '',
+        showExportModal: false,
+        exportFormat: 'zip', // Default export format: 'zip', 'epub', 'html', 'txt'
         showAISettings: false,
         showPromptsPanel: false,
         showPromptHistory: false,
@@ -1710,19 +1712,48 @@ document.addEventListener('alpine:init', () => {
             await window.ProjectManager.renameCurrentProject(this, this.renameProjectName);
         },
 
-        // Export the current project as a ZIP file containing scenes (Markdown), metadata, and compendium
+        // Show export format selection modal
         async exportProject() {
-            await window.ProjectManager.exportProject(this);
-            // Track last export time
-            if (this.currentProject) {
-                try {
-                    const key = `writingway:lastExport:${this.currentProject.id}`;
-                    localStorage.setItem(key, new Date().toISOString());
-                    this.showExportReminder = false;
-                    this.exportReminderDismissed = false;
-                } catch (e) {
-                    console.warn('Could not save last export time:', e);
+            this.showExportModal = true;
+        },
+
+        // Confirm and execute export based on selected format
+        async confirmExport() {
+            this.showExportModal = false;
+
+            try {
+                // Call appropriate export function based on format
+                switch (this.exportFormat) {
+                    case 'zip':
+                        await window.ProjectManager.exportAsZip(this);
+                        break;
+                    case 'epub':
+                        await window.ProjectManager.exportAsEpub(this);
+                        break;
+                    case 'html':
+                        await window.ProjectManager.exportAsHtml(this);
+                        break;
+                    case 'txt':
+                        await window.ProjectManager.exportAsTxt(this);
+                        break;
+                    default:
+                        await window.ProjectManager.exportAsZip(this);
                 }
+
+                // Track last export time
+                if (this.currentProject) {
+                    try {
+                        const key = `writingway:lastExport:${this.currentProject.id}`;
+                        localStorage.setItem(key, new Date().toISOString());
+                        this.showExportReminder = false;
+                        this.exportReminderDismissed = false;
+                    } catch (e) {
+                        console.warn('Could not save last export time:', e);
+                    }
+                }
+            } catch (e) {
+                console.error('Export error:', e);
+                alert('Export failed: ' + (e.message || e));
             }
         },
 

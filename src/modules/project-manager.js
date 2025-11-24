@@ -348,14 +348,10 @@
         },
 
         /**
-         * Export the current project as a ZIP file containing scenes (Markdown), metadata, and compendium
+         * Export current project as a ZIP file with organized folder structure
          * @param {Object} app - Alpine app instance
          */
-        /**
-         * Export current project as a ZIP file
-         * @param {Object} app - Alpine app instance
-         */
-        async exportProject(app) {
+        async exportAsZip(app) {
             if (!app.currentProject) return;
             try {
                 if (typeof JSZip === 'undefined') {
@@ -415,6 +411,395 @@
                 console.error('Export failed:', e);
                 alert('Export failed: ' + (e && e.message ? e.message : e));
             }
+        },
+
+        /**
+         * Export current project as a single plain text file
+         * @param {Object} app - Alpine app instance
+         */
+        async exportAsTxt(app) {
+            if (!app.currentProject) return;
+            try {
+                const pid = app.currentProject.id;
+                let output = '';
+
+                // Add project title
+                output += `${app.currentProject.name}\n`;
+                output += '='.repeat(app.currentProject.name.length) + '\n\n';
+
+                const chapters = await db.chapters.where('projectId').equals(pid).sortBy('order');
+                for (const ch of chapters) {
+                    // Add chapter title
+                    output += `\n\n${ch.title}\n`;
+                    output += '-'.repeat(ch.title.length) + '\n\n';
+
+                    const scenes = await db.scenes.where('projectId').equals(pid).and(s => s.chapterId === ch.id).sortBy('order');
+                    for (const s of scenes) {
+                        // fetch content robustly
+                        let content = null;
+                        try { content = await db.content.get(s.id); } catch (e) { content = null; }
+                        if (!content) {
+                            try { content = await db.content.where('sceneId').equals(s.id).first(); } catch (e) { content = null; }
+                        }
+                        const text = content ? (content.text || '') : '';
+
+                        // Add scene with title as comment
+                        output += `\n# ${s.title}\n\n`;
+                        output += text + '\n';
+                    }
+                }
+
+                const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+                const nameSafe = (app.currentProject.name || 'project').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 80).trim();
+                const fname = `${nameSafe || 'writingway_project'}.txt`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Export failed:', e);
+                alert('Export failed: ' + (e && e.message ? e.message : e));
+            }
+        },
+
+        /**
+         * Export current project as HTML file
+         * @param {Object} app - Alpine app instance
+         */
+        async exportAsHtml(app) {
+            if (!app.currentProject) return;
+            try {
+                const pid = app.currentProject.id;
+                let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${this.escapeHtml(app.currentProject.name)}</title>
+    <style>
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            line-height: 1.8;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #fafafa;
+            color: #333;
+        }
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            margin-bottom: 0.5em;
+            border-bottom: 3px solid #333;
+            padding-bottom: 0.3em;
+        }
+        h2 {
+            font-size: 1.8em;
+            margin-top: 2em;
+            margin-bottom: 0.5em;
+            border-bottom: 2px solid #666;
+            padding-bottom: 0.2em;
+        }
+        h3 {
+            font-size: 1.2em;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: #666;
+            font-style: italic;
+        }
+        p {
+            margin: 1em 0;
+            text-align: justify;
+        }
+        .scene-break {
+            text-align: center;
+            margin: 2em 0;
+            font-size: 1.5em;
+            letter-spacing: 1em;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            h2 {
+                page-break-before: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>${this.escapeHtml(app.currentProject.name)}</h1>
+`;
+
+                const chapters = await db.chapters.where('projectId').equals(pid).sortBy('order');
+                for (let i = 0; i < chapters.length; i++) {
+                    const ch = chapters[i];
+                    html += `    <h2>${this.escapeHtml(ch.title)}</h2>\n`;
+
+                    const scenes = await db.scenes.where('projectId').equals(pid).and(s => s.chapterId === ch.id).sortBy('order');
+                    for (let j = 0; j < scenes.length; j++) {
+                        const s = scenes[j];
+                        // fetch content robustly
+                        let content = null;
+                        try { content = await db.content.get(s.id); } catch (e) { content = null; }
+                        if (!content) {
+                            try { content = await db.content.where('sceneId').equals(s.id).first(); } catch (e) { content = null; }
+                        }
+                        const text = content ? (content.text || '') : '';
+
+                        html += `    <h3>${this.escapeHtml(s.title)}</h3>\n`;
+
+                        // Convert plain text to HTML paragraphs
+                        const paragraphs = text.split('\n\n').filter(p => p.trim());
+                        for (const para of paragraphs) {
+                            html += `    <p>${this.escapeHtml(para).replace(/\n/g, '<br>')}</p>\n`;
+                        }
+
+                        // Add scene break between scenes (but not after the last scene)
+                        if (j < scenes.length - 1) {
+                            html += `    <div class="scene-break">* * *</div>\n`;
+                        }
+                    }
+                }
+
+                html += `</body>
+</html>`;
+
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const nameSafe = (app.currentProject.name || 'project').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 80).trim();
+                const fname = `${nameSafe || 'writingway_project'}.html`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Export failed:', e);
+                alert('Export failed: ' + (e && e.message ? e.message : e));
+            }
+        },
+
+        /**
+         * Export current project as EPUB
+         * @param {Object} app - Alpine app instance
+         */
+        async exportAsEpub(app) {
+            if (!app.currentProject) return;
+            try {
+                if (typeof JSZip === 'undefined') {
+                    alert('ZIP library required for EPUB export is not loaded.');
+                    return;
+                }
+
+                const zip = new JSZip();
+                const pid = app.currentProject.id;
+                const projectName = app.currentProject.name || 'Untitled';
+                const nameSafe = projectName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 80).trim();
+
+                // EPUB requires specific structure
+                // mimetype file (must be first, uncompressed)
+                zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+
+                // META-INF/container.xml
+                zip.file('META-INF/container.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+    <rootfiles>
+        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+    </rootfiles>
+</container>`);
+
+                // Fetch all chapters and scenes
+                const chapters = await db.chapters.where('projectId').equals(pid).sortBy('order');
+                const contentFiles = [];
+                let contentHtml = '';
+
+                for (let chIdx = 0; chIdx < chapters.length; chIdx++) {
+                    const ch = chapters[chIdx];
+                    const chId = `chapter${chIdx + 1}`;
+
+                    let chapterContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>${this.escapeHtml(ch.title)}</title>
+    <link rel="stylesheet" type="text/css" href="stylesheet.css"/>
+</head>
+<body>
+    <h1>${this.escapeHtml(ch.title)}</h1>
+`;
+
+                    const scenes = await db.scenes.where('projectId').equals(pid).and(s => s.chapterId === ch.id).sortBy('order');
+                    for (const s of scenes) {
+                        // fetch content robustly
+                        let content = null;
+                        try { content = await db.content.get(s.id); } catch (e) { content = null; }
+                        if (!content) {
+                            try { content = await db.content.where('sceneId').equals(s.id).first(); } catch (e) { content = null; }
+                        }
+                        const text = content ? (content.text || '') : '';
+
+                        chapterContent += `    <h2>${this.escapeHtml(s.title)}</h2>\n`;
+
+                        // Convert plain text to HTML paragraphs
+                        const paragraphs = text.split('\n\n').filter(p => p.trim());
+                        for (const para of paragraphs) {
+                            chapterContent += `    <p>${this.escapeHtml(para).replace(/\n/g, '<br/>')}</p>\n`;
+                        }
+                    }
+
+                    chapterContent += `</body>
+</html>`;
+
+                    const filename = `${chId}.xhtml`;
+                    zip.file(`OEBPS/${filename}`, chapterContent);
+                    contentFiles.push({ id: chId, href: filename, title: ch.title });
+                }
+
+                // Create content.opf (package document)
+                const uuid = this.generateUUID();
+                const timestamp = new Date().toISOString();
+                let opf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uuid_id">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:identifier id="uuid_id">urn:uuid:${uuid}</dc:identifier>
+        <dc:title>${this.escapeHtml(projectName)}</dc:title>
+        <dc:language>en</dc:language>
+        <meta property="dcterms:modified">${timestamp}</meta>
+    </metadata>
+    <manifest>
+        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+        <item id="stylesheet" href="stylesheet.css" media-type="text/css"/>
+`;
+
+                for (const file of contentFiles) {
+                    opf += `        <item id="${file.id}" href="${file.href}" media-type="application/xhtml+xml"/>\n`;
+                }
+
+                opf += `    </manifest>
+    <spine toc="ncx">
+`;
+
+                for (const file of contentFiles) {
+                    opf += `        <itemref idref="${file.id}"/>\n`;
+                }
+
+                opf += `    </spine>
+</package>`;
+
+                zip.file('OEBPS/content.opf', opf);
+
+                // Create toc.ncx (navigation)
+                let ncx = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+    <head>
+        <meta name="dtb:uid" content="urn:uuid:${uuid}"/>
+        <meta name="dtb:depth" content="1"/>
+        <meta name="dtb:totalPageCount" content="0"/>
+        <meta name="dtb:maxPageNumber" content="0"/>
+    </head>
+    <docTitle>
+        <text>${this.escapeHtml(projectName)}</text>
+    </docTitle>
+    <navMap>
+`;
+
+                for (let i = 0; i < contentFiles.length; i++) {
+                    const file = contentFiles[i];
+                    ncx += `        <navPoint id="navpoint-${i + 1}" playOrder="${i + 1}">
+            <navLabel>
+                <text>${this.escapeHtml(file.title)}</text>
+            </navLabel>
+            <content src="${file.href}"/>
+        </navPoint>
+`;
+                }
+
+                ncx += `    </navMap>
+</ncx>`;
+
+                zip.file('OEBPS/toc.ncx', ncx);
+
+                // Create basic stylesheet
+                const css = `body {
+    font-family: Georgia, serif;
+    line-height: 1.8;
+    margin: 2em;
+}
+
+h1 {
+    font-size: 2em;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    text-align: center;
+}
+
+h2 {
+    font-size: 1.5em;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-style: italic;
+}
+
+p {
+    margin: 1em 0;
+    text-indent: 1.5em;
+}
+
+p:first-of-type {
+    text-indent: 0;
+}`;
+
+                zip.file('OEBPS/stylesheet.css', css);
+
+                // Generate EPUB file
+                const blob = await zip.generateAsync({
+                    type: 'blob',
+                    mimeType: 'application/epub+zip',
+                    compression: 'DEFLATE'
+                });
+
+                const fname = `${nameSafe || 'writingway_project'}.epub`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fname;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Export failed:', e);
+                alert('Export failed: ' + (e && e.message ? e.message : e));
+            }
+        },
+
+        /**
+         * Helper: Escape HTML special characters
+         */
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        },
+
+        /**
+         * Helper: Generate a simple UUID v4
+         */
+        generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        },
+
+        /**
+         * Export the current project as a ZIP file containing scenes (Markdown), metadata, and compendium
+         * @param {Object} app - Alpine app instance
+         * @deprecated Use exportAsZip instead
+         */
+        async exportProject(app) {
+            // Backward compatibility wrapper
+            return await this.exportAsZip(app);
         },
 
         /**
