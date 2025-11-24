@@ -308,6 +308,7 @@ document.addEventListener('alpine:init', () => {
         workshopFidelityMode: 'balanced',
         showWorkshopContext: false,
         selectedWorkshopContext: [],
+        useWorkshopContextPanel: false,
         // Workshop mention autocomplete state
         showWorkshopQuickSearch: false,
         workshopQuickSearchMatches: [],

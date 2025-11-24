@@ -135,6 +135,25 @@ window.workshopChat = {
             }
         }
 
+        // Add context from context panel if enabled
+        if (app.useWorkshopContextPanel && app.buildContextFromPanel) {
+            try {
+                const panelContext = await app.buildContextFromPanel();
+
+                // Add compendium entries from context panel
+                for (const entry of panelContext.compendiumEntries) {
+                    contextParts.push(`[${entry.category}: ${entry.title}]\n${entry.body}`);
+                }
+
+                // Add scenes from context panel
+                for (const sceneSummary of panelContext.sceneSummaries) {
+                    contextParts.push(`[Scene: ${sceneSummary.title}]\n${sceneSummary.summary}`);
+                }
+            } catch (e) {
+                console.warn('Error loading context panel data:', e);
+            }
+        }
+
         // Also check for any selected context items (if we add manual selection later)
         if (app.selectedWorkshopContext && app.selectedWorkshopContext.length > 0) {
             for (const ctx of app.selectedWorkshopContext) {
