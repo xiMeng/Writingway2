@@ -1,3 +1,11 @@
+/* Scene options/generation panel scroll fix */
+.beat-panel {
+    max-height: calc(100vh - 180px);
+    /* Adjust 180px if your header/toolbars are taller/shorter */
+    overflow-y: auto;
+    min-height: 0;
+}
+
 * {
     margin: 0;
     padding: 0;
