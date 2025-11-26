@@ -42,10 +42,10 @@
                 chapterId: targetChapter.id,
                 title: sceneName,
                 order: (targetChapter.scenes || []).length,
-                // initialize with current POV options
+                // initialize with current POV options, ensuring proper defaults
                 povCharacter: app.povCharacter || '',
-                pov: app.pov || '3rd person limited',
-                tense: app.tense || 'past',
+                pov: (app.pov && app.pov.trim()) ? app.pov : '3rd person limited',
+                tense: (app.tense && app.tense.trim()) ? app.tense : 'past',
                 created: new Date(),
                 modified: new Date(),
                 updatedAt: now

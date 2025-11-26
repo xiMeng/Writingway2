@@ -90,10 +90,10 @@
                 order: typeof scene.order === 'number' ? scene.order : 0,
                 chapterId: scene.chapterId || null,
                 // prefer app-level UI values if present (the POV inputs are bound to app props),
-                // fallback to currentScene fields when available
-                povCharacter: (app.povCharacter !== undefined ? app.povCharacter : (scene.povCharacter || '')),
-                pov: (app.pov !== undefined ? app.pov : (scene.pov || '')),
-                tense: (app.tense !== undefined ? app.tense : (scene.tense || '')),
+                // fallback to currentScene fields, then to defaults
+                povCharacter: (app.povCharacter !== undefined && app.povCharacter !== null ? app.povCharacter : (scene.povCharacter || '')),
+                pov: (app.pov && app.pov.trim() ? app.pov : (scene.pov || '3rd person limited')),
+                tense: (app.tense && app.tense.trim() ? app.tense : (scene.tense || 'past')),
                 modified: new Date(),
                 updatedAt: now,
                 wordCount
