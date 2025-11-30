@@ -680,14 +680,14 @@
 
                 // Create content.opf (package document)
                 const uuid = this.generateUUID();
-                const timestamp = new Date().toISOString();
+                const epubTimestamp = new Date().toISOString();
                 let opf = `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uuid_id">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:identifier id="uuid_id">urn:uuid:${uuid}</dc:identifier>
         <dc:title>${this.escapeHtml(projectName)}</dc:title>
-        <dc:language>en</dc:language>
-        <meta property="dcterms:modified">${timestamp}</meta>
+                <dc:language>en</dc:language>
+        <meta property="dcterms:modified">${epubTimestamp}</meta>
     </metadata>
     <manifest>
         <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
