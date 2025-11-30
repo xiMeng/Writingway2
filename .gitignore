@@ -17,3 +17,5 @@ dist/
 .vscode/
 .idea/
 todo.md
+# Ignore Continue AI configs
+.continue/
