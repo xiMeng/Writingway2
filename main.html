@@ -2329,12 +2329,31 @@
                                 </select>
                             </label>
 
+                            <!-- Use Provider Defaults Toggle -->
+                            <div style="margin-bottom:16px;">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                    <input type="checkbox" x-model="useProviderDefaults"
+                                        @change="saveGenerationParams()" style="width:16px;height:16px;cursor:pointer;">
+                                    <span style="font-size:13px;color:var(--text-primary);">
+                                        Use model's default settings
+                                    </span>
+                                </label>
+                                <p
+                                    style="font-size:11px;color:var(--text-secondary);margin:4px 0 0 0;padding-left:24px;">
+                                    When enabled, temperature and max length won't be sent to the AI provider.
+                                    The model will use its own default settings. Useful for letting providers optimize
+                                    each model.
+                                </p>
+                            </div>
+
                             <!-- Temperature -->
                             <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:12px;"
-                                title="Controls randomness. Lower (0.3-0.6) = more focused and consistent. Higher (0.8-1.2) = more creative and varied.">
+                                title="Controls randomness. Lower (0.3-0.6) = more focused and consistent. Higher (0.8-1.2) = more creative and varied."
+                                :style="useProviderDefaults ? 'opacity:0.5;pointer-events:none;' : ''">
                                 TEMPERATURE: <span x-text="temperature.toFixed(1)"></span>
                                 <input type="range" x-model.number="temperature" min="0.1" max="1.5" step="0.1"
-                                    @input="saveGenerationParams()" style="width:100%;margin-top:6px;">
+                                    @input="saveGenerationParams()" style="width:100%;margin-top:6px;"
+                                    :disabled="useProviderDefaults">
                                 <div
                                     style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-tertiary);margin-top:2px;">
                                     <span>Focused</span>
@@ -2345,10 +2364,12 @@
 
                             <!-- Max Tokens -->
                             <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:12px;"
-                                title="Maximum length of generated text. 100-200 = short paragraph, 300-500 = multiple paragraphs, 800-1500 = longer scenes, 2000-5000 = very long, 10000+ = thinking models with reasoning.">
+                                title="Maximum length of generated text. 100-200 = short paragraph, 300-500 = multiple paragraphs, 800-1500 = longer scenes, 2000-5000 = very long, 10000+ = thinking models with reasoning."
+                                :style="useProviderDefaults ? 'opacity:0.5;pointer-events:none;' : ''">
                                 MAX LENGTH: <span x-text="maxTokens"></span> tokens
                                 <input type="range" x-model.number="maxTokens" min="100" max="20000" step="100"
-                                    @input="saveGenerationParams()" style="width:100%;margin-top:6px;">
+                                    @input="saveGenerationParams()" style="width:100%;margin-top:6px;"
+                                    :disabled="useProviderDefaults">
                                 <div
                                     style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-tertiary);margin-top:2px;">
                                     <span>Short</span>

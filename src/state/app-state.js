@@ -201,6 +201,7 @@ function createAppState() {
         // ========== Generation Parameters ==========
         temperature: 0.8,
         maxTokens: 300,
+        useProviderDefaults: false, // Don't send temperature/maxTokens, let provider use their defaults
         forceNonStreaming: false, // Force non-streaming mode for models that don't support it
 
         // ========== Available Models Per Provider ==========

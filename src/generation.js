@@ -100,6 +100,7 @@
         const aiApiKey = app?.aiApiKey || '';
         const aiModel = app?.aiModel || '';
         const aiEndpoint = app?.aiEndpoint || 'http://localhost:8080';
+        const useProviderDefaults = app?.useProviderDefaults || false;
         const temperature = app?.temperature || 0.8;
         const maxTokens = app?.maxTokens || 300;
 
@@ -125,10 +126,10 @@
 
         if (aiMode === 'api') {
             // API Mode - use configured provider with messages
-            return await streamGenerationAPI(messages || promptStr, onToken, aiProvider, aiApiKey, aiModel, aiEndpoint, temperature, maxTokens, app);
+            return await streamGenerationAPI(messages || promptStr, onToken, aiProvider, aiApiKey, aiModel, aiEndpoint, temperature, maxTokens, app, useProviderDefaults);
         } else {
             // Local Mode - use llama-server with string prompt
-            return await streamGenerationLocal(promptStr, onToken, aiEndpoint, temperature, maxTokens);
+            return await streamGenerationLocal(promptStr, onToken, aiEndpoint, temperature, maxTokens, useProviderDefaults);
         }
     }
 
@@ -149,19 +150,25 @@
         return result;
     }
 
-    async function streamGenerationLocal(prompt, onToken, endpoint, temperature, maxTokens) {
+    async function streamGenerationLocal(prompt, onToken, endpoint, temperature, maxTokens, useProviderDefaults) {
         // Local llama-server completion
+        const requestBody = {
+            prompt: prompt,
+            top_p: 0.9,
+            stop: ['<|im_end|>', '<|endoftext|>', '\n\n\n\n', 'USER:', 'HUMAN:'],
+            stream: true
+        };
+
+        // Only include temperature and maxTokens if not using provider defaults
+        if (!useProviderDefaults) {
+            requestBody.n_predict = maxTokens || 300;
+            requestBody.temperature = temperature || 0.8;
+        }
+
         const response = await fetch(endpoint + '/completion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt: prompt,
-                n_predict: maxTokens || 300,
-                temperature: temperature || 0.8,
-                top_p: 0.9,
-                stop: ['<|im_end|>', '<|endoftext|>', '\n\n\n\n', 'USER:', 'HUMAN:'],
-                stream: true
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -199,7 +206,7 @@
         }
     }
 
-    async function streamGenerationAPI(prompt, onToken, provider, apiKey, model, customEndpoint, temperature, maxTokens, app) {
+    async function streamGenerationAPI(prompt, onToken, provider, apiKey, model, customEndpoint, temperature, maxTokens, app, useProviderDefaults) {
         // API Mode - construct request based on provider
         let url, headers, body;
 
@@ -259,10 +266,13 @@
             body = {
                 model: model || 'google/gemini-2.0-flash-exp:free',
                 messages: messages,
-                temperature: temp,
-                max_tokens: maxTok,
                 stream: !shouldDisableStreaming // Disable streaming for thinking models or if forced
             };
+            // Only include temperature/max_tokens if not using provider defaults
+            if (!useProviderDefaults) {
+                body.temperature = temp;
+                body.max_tokens = maxTok;
+            }
         } else if (provider === 'anthropic') {
             url = 'https://api.anthropic.com/v1/messages';
             headers = {
@@ -273,10 +283,16 @@
             body = {
                 model: model || 'claude-3-5-sonnet-20241022',
                 messages: messages,
-                temperature: temp,
-                max_tokens: maxTok,
                 stream: true // Anthropic models all support streaming
             };
+            // Only include temperature/max_tokens if not using provider defaults
+            if (!useProviderDefaults) {
+                body.temperature = temp;
+                body.max_tokens = maxTok;
+            } else {
+                // Anthropic requires max_tokens to be set, use a high default
+                body.max_tokens = 4096;
+            }
         } else if (provider === 'openai') {
             url = 'https://api.openai.com/v1/chat/completions';
             headers = {
@@ -286,22 +302,28 @@
             body = {
                 model: model || 'gpt-4o-mini',
                 messages: messages,
-                temperature: temp,
-                max_tokens: maxTok,
                 stream: !shouldDisableStreaming // Disable streaming for thinking models or if forced
             };
+            // Only include temperature/max_tokens if not using provider defaults
+            if (!useProviderDefaults) {
+                body.temperature = temp;
+                body.max_tokens = maxTok;
+            }
         } else if (provider === 'google') {
             // Google AI uses a different API format - extract text from messages
             const text = messages.map(m => m.content).join('\n\n');
             url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash-exp'}:streamGenerateContent?key=${apiKey}`;
             headers = { 'Content-Type': 'application/json' };
             body = {
-                contents: [{ parts: [{ text: text }] }],
-                generationConfig: {
+                contents: [{ parts: [{ text: text }] }]
+            };
+            // Only include generationConfig if not using provider defaults
+            if (!useProviderDefaults) {
+                body.generationConfig = {
                     temperature: temp,
                     maxOutputTokens: maxTok
-                }
-            };
+                };
+            }
         } else if (provider === 'custom') {
             url = customEndpoint;
             headers = {
@@ -311,16 +333,23 @@
             body = {
                 model: model,
                 messages: messages,
-                temperature: temp,
-                max_tokens: maxTok,
                 stream: true
             };
+            // Only include temperature/max_tokens if not using provider defaults
+            if (!useProviderDefaults) {
+                body.temperature = temp;
+                body.max_tokens = maxTok;
+            }
         }
 
         // Debug logging for API requests
         console.log('🚀 API Request to:', provider);
         console.log('📨 Messages being sent:', JSON.stringify(messages, null, 2));
-        console.log('⚙️ Temperature:', temp, 'Max Tokens:', maxTok);
+        if (useProviderDefaults) {
+            console.log('⚙️ Using provider defaults (temperature and max_tokens not specified)');
+        } else {
+            console.log('⚙️ Temperature:', temp, 'Max Tokens:', maxTok);
+        }
 
         const response = await fetch(url, {
             method: 'POST',
