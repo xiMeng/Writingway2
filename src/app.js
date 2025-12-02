@@ -1450,7 +1450,11 @@ document.addEventListener('alpine:init', () => {
 
             // Editor
             onEditorChange(e) {
-                // Content automatically updated via x-model
+                if (this.currentScene) {
+                    this.currentScene.content = e.target && e.target.value !== undefined ? e.target.value : '';
+                } else {
+                    return;
+                }
                 this.saveStatus = 'Unsaved';
                 clearTimeout(this.saveTimeout);
                 this.saveTimeout = setTimeout(() => {

@@ -550,24 +550,22 @@
                                             <div>
                                                 <div
                                                     style="font-weight:600;color:var(--text-primary);margin-bottom:4px;">
-                                                    Don't forget to backup your work!
+                                                    <span x-text="(locale, t('export.reminder.title'))"></span>
                                                 </div>
                                                 <div
                                                     style="font-size:12px;color:var(--text-secondary);line-height:1.4;">
-                                                    Your project is saved in your browser. Export it regularly to keep a
-                                                    backup
-                                                    on your computer.
+                                                    <span x-text="(locale, t('export.reminder.body'))"></span>
                                                 </div>
                                             </div>
                                         </div>
                                         <div style="display:flex;gap:8px;align-items:center;">
                                             <button class="btn btn-primary" @click="exportProject()"
                                                 style="padding:8px 16px;font-size:13px;white-space:nowrap;">
-                                                📦 Export Now
+                                                <span x-text="(locale, t('export.reminder.exportNow'))"></span>
                                             </button>
                                             <button class="btn btn-secondary" @click="dismissExportReminder()"
                                                 style="padding:8px 12px;font-size:13px;">
-                                                Dismiss
+                                                <span x-text="(locale, t('export.reminder.dismiss'))"></span>
                                             </button>
                                         </div>
                                     </div>
@@ -579,13 +577,13 @@
                                         <textarea x-show="!showMarkdownPreview" class="editor-textarea"
                                                 :class="{ 'has-generated-text': showGeneratedHighlight }"
                                                 @input="onEditorChange($event); handleAutoReplace($event)"
-                                                @paste="handlePaste" x-model="currentScene.content"
+                                                @paste="handlePaste" :value="currentScene ? currentScene.content : ''"
                                                 style="outline:none;direction:ltr;resize:none;" dir="ltr"
                                                 :placeholder="(locale, t('place.scene.writeHere'))"></textarea>
 
                                         <!-- Preview Mode: Rendered HTML -->
                                         <div x-show="showMarkdownPreview" class="editor-preview"
-                                            x-html="markdownToHtml(currentScene.content)"
+                                            x-html="currentScene ? markdownToHtml(currentScene.content) : ''"
                                             style="flex:1;padding:50px 60px;background:var(--bg-primary);overflow-y:auto;direction:ltr;font-family:'Georgia',serif;font-size:17px;line-height:2.0;color:#e8e8e8;">
                                         </div>
                                     </div>
