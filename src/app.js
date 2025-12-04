@@ -112,7 +112,7 @@ document.addEventListener('alpine:init', () => {
                 // Load AI settings from localStorage
                 await this.loadAISettings();
 
-                this.updateLoadingScreen(50, t('loading.initializingAI'), t('loading.mayTakeLong'));
+                this.updateLoadingScreen(50, t('loading.initializingAI'), t('loading.AILoadMayTakeLong'));
 
                 // Initialize tab sync for multi-tab coordination
                 if (window.TabSync && typeof window.TabSync.init === 'function') {
